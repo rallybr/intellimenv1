@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/services/supabase_service.dart';
@@ -25,6 +27,7 @@ class _CompleteProfilePageState extends ConsumerState<CompleteProfilePage> {
   String? _selectedState;
   DateTime? _selectedDate;
   bool _isLoading = false;
+  File? _userPhoto;
 
   @override
   void dispose() {
@@ -48,7 +51,58 @@ class _CompleteProfilePageState extends ConsumerState<CompleteProfilePage> {
     }
   }
 
+  Future<void> _pickUserPhoto() async {
+    final picker = ImagePicker();
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('Tirar foto'),
+                onTap: () async {
+                  Navigator.of(context).pop();
+                  final pickedFile = await picker.pickImage(source: ImageSource.camera);
+                  if (pickedFile != null) {
+                    setState(() {
+                      _userPhoto = File(pickedFile.path);
+                    });
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Escolher da galeria'),
+                onTap: () async {
+                  Navigator.of(context).pop();
+                  final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+                  if (pickedFile != null) {
+                    setState(() {
+                      _userPhoto = File(pickedFile.path);
+                    });
+                  }
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _completeProfile() async {
+    if (_userPhoto == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Por favor, adicione uma foto de perfil'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
@@ -96,203 +150,242 @@ class _CompleteProfilePageState extends ConsumerState<CompleteProfilePage> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text(
-          'Completar Perfil',
-          style: TextStyle(color: AppColors.white),
-        ),
-      ),
-      body: SafeArea(
-        child: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                Color(0xFF333333),
-                Color(0xFF434343),
-                Color(0xFF333333),
-              ],
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-            ),
-          ),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const SizedBox(height: 20),
-                  
-                  // Título
-                  const Text(
-                    'Complete seu perfil',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.white,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Forneça algumas informações adicionais para personalizar sua experiência',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: AppColors.white,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  
-                  const SizedBox(height: 40),
-                  
-                  // Campo de WhatsApp
-                  TextFormField(
-                    controller: _whatsappController,
-                    keyboardType: TextInputType.phone,
-                    style: const TextStyle(color: AppColors.white),
-                    decoration: const InputDecoration(
-                      labelText: 'WhatsApp (opcional)',
-                      labelStyle: TextStyle(color: AppColors.white),
-                      prefixIcon: Icon(Icons.phone, color: AppColors.white),
-                      hintText: '(11) 99999-9999',
-                      hintStyle: TextStyle(color: AppColors.mediumGray),
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 16),
-                  
-                  // Campo de data de nascimento
-                  TextFormField(
-                    controller: _birthDateController,
-                    readOnly: true,
-                    style: const TextStyle(color: AppColors.white),
-                    decoration: InputDecoration(
-                      labelText: 'Data de nascimento *',
-                      labelStyle: const TextStyle(color: AppColors.white),
-                      prefixIcon: const Icon(Icons.calendar_today, color: AppColors.white),
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.date_range, color: AppColors.white),
-                        onPressed: () => _selectDate(context),
-                      ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Por favor, selecione sua data de nascimento';
-                      }
-                      return null;
-                    },
-                  ),
-                  
-                  const SizedBox(height: 16),
-                  
-                  // Campo de estado
-                  DropdownButtonFormField<String>(
-                    value: _selectedState,
-                    style: const TextStyle(color: AppColors.white),
-                    dropdownColor: AppColors.secondary,
-                    decoration: const InputDecoration(
-                      labelText: 'Estado *',
-                      labelStyle: TextStyle(color: AppColors.white),
-                      prefixIcon: Icon(Icons.location_on, color: AppColors.white),
-                    ),
-                    items: AppConstants.brazilianStates.map((String state) {
-                      return DropdownMenuItem<String>(
-                        value: state,
-                        child: Text(
-                          state,
-                          style: const TextStyle(color: AppColors.white),
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (String? newValue) {
-                      setState(() {
-                        _selectedState = newValue;
-                      });
-                    },
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Por favor, selecione seu estado';
-                      }
-                      return null;
-                    },
-                  ),
-                  
-                  const SizedBox(height: 32),
-                  
-                  // Informações sobre idade
-                  if (_selectedDate != null) ...[
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppColors.secondary,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Column(
-                        children: [
-                          const Text(
-                            'Informações baseadas na sua idade:',
-                            style: TextStyle(
-                              color: AppColors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          _buildAgeInfo(),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-                  
-                  // Botão de completar perfil
-                  SizedBox(
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _completeProfile,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.gold,
-                        foregroundColor: AppColors.primary,
-                      ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-                              ),
-                            )
-                          : const Text(
-                              'Completar Perfil',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 16),
-                  
-                  // Link para pular
-                  TextButton(
-                    onPressed: () {
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(builder: (context) => const HomePage()),
-                      );
-                    },
-                    child: const Text(
-                      'Pular por enquanto',
-                      style: TextStyle(
-                        color: AppColors.white,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                ],
+        centerTitle: true,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(left: 20),
+              child: Image.asset(
+                'assets/logos/logo-intellimen-square.png',
+                width: 48,
+                height: 48,
               ),
             ),
-          ),
+            const SizedBox(width: 12),
+            const Text(
+              'COMPLETAR SEU PERFIL',
+              style: TextStyle(color: AppColors.white),
+            ),
+          ],
+        ),
+      ),
+      body: SizedBox.expand(
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: Image.asset(
+                'assets/images/bg-intellimen.jpg',
+                fit: BoxFit.cover,
+              ),
+            ),
+            Positioned.fill(
+              child: Container(
+                color: Colors.black.withOpacity(0.7),
+              ),
+            ),
+            SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24.0),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(height: 20),
+                      Center(
+                        child: Column(
+                          children: [
+                            const SizedBox(height: 24),
+                            // Campo de foto do usuário (novo local)
+                            Center(
+                              child: Column(
+                                children: [
+                                  GestureDetector(
+                                    onTap: _pickUserPhoto,
+                                    child: Container(
+                                      width: 150,
+                                      height: 150,
+                                      decoration: BoxDecoration(
+                                        border: Border.all(color: Colors.white, width: 1),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: _userPhoto != null
+                                          ? ClipRRect(
+                                              borderRadius: BorderRadius.circular(10),
+                                              child: Image.file(
+                                                _userPhoto!,
+                                                width: 150,
+                                                height: 150,
+                                                fit: BoxFit.cover,
+                                              ),
+                                            )
+                                          : ClipRRect(
+                                              borderRadius: BorderRadius.circular(10),
+                                              child: Image.asset(
+                                                'assets/logos/camera.png',
+                                                width: 150,
+                                                height: 150,
+                                                fit: BoxFit.contain,
+                                              ),
+                                            ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    'ADD FOTO DE PERFIL',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 30),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            // Campo de WhatsApp
+                            TextFormField(
+                              controller: _whatsappController,
+                              keyboardType: TextInputType.phone,
+                              style: const TextStyle(color: AppColors.gold),
+                              decoration: const InputDecoration(
+                                labelText: 'WhatsApp',
+                                labelStyle: TextStyle(color: AppColors.gold),
+                                prefixIcon: Icon(Icons.phone, color: AppColors.gold),
+                                filled: true,
+                                fillColor: Color(0xFF222222),
+                                hintText: '(11) 99999-9999',
+                                hintStyle: TextStyle(color: AppColors.mediumGray),
+                              ),
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Por favor, preencha o WhatsApp';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            // Campo de data de nascimento
+                            TextFormField(
+                              controller: _birthDateController,
+                              readOnly: true,
+                              style: const TextStyle(color: AppColors.gold),
+                              decoration: InputDecoration(
+                                labelText: 'Data de nascimento *',
+                                labelStyle: const TextStyle(color: AppColors.gold),
+                                prefixIcon: const Icon(Icons.calendar_today, color: AppColors.gold),
+                                suffixIcon: IconButton(
+                                  icon: const Icon(Icons.date_range, color: AppColors.gold),
+                                  onPressed: () => _selectDate(context),
+                                ),
+                                filled: true,
+                                fillColor: const Color(0xFF222222),
+                              ),
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Por favor, selecione sua data de nascimento';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            // Campo de estado
+                            DropdownButtonFormField<String>(
+                              value: _selectedState,
+                              style: const TextStyle(color: AppColors.gold),
+                              dropdownColor: Color(0xFF222222),
+                              decoration: const InputDecoration(
+                                labelText: 'Estado *',
+                                labelStyle: TextStyle(color: AppColors.gold),
+                                prefixIcon: Icon(Icons.location_on, color: AppColors.gold),
+                                filled: true,
+                                fillColor: Color(0xFF222222),
+                              ),
+                              items: AppConstants.brazilianStates.map((String state) {
+                                return DropdownMenuItem<String>(
+                                  value: state,
+                                  child: Text(
+                                    state,
+                                    style: const TextStyle(color: AppColors.gold),
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (String? newValue) {
+                                setState(() {
+                                  _selectedState = newValue;
+                                });
+                              },
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Por favor, selecione seu estado';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 32),
+                            // Informações sobre idade
+                            if (_selectedDate != null) ...[
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: AppColors.secondary,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Column(
+                                  children: [
+                                    const Text(
+                                      'Informações baseadas na sua idade:',
+                                      style: TextStyle(
+                                        color: AppColors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    _buildAgeInfo(),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                            ],
+                            // Botão de completar perfil
+                            SizedBox(
+                              height: 50,
+                              child: ElevatedButton(
+                                onPressed: _isLoading ? null : _completeProfile,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.gold,
+                                  foregroundColor: AppColors.primary,
+                                ),
+                                child: _isLoading
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                                        ),
+                                      )
+                                    : const Text(
+                                        'Completar Perfil',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

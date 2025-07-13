@@ -109,13 +109,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             width: 80,
                             height: 80,
                             decoration: BoxDecoration(
-                              color: AppColors.gold,
+                              color: Colors.transparent,
                               borderRadius: BorderRadius.circular(20),
                             ),
-                            child: const Icon(
-                              Icons.fitness_center,
-                              size: 40,
-                              color: AppColors.white,
+                            child: Image.asset(
+                              'assets/logos/logo-intellimen-square.png',
+                              fit: BoxFit.contain,
                             ),
                           ),
                           const SizedBox(height: 24),
@@ -156,11 +155,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         fillColor: Color(0xFF222222),
                       ),
                       validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Por favor, insira seu e-mail';
+                        if (value == null || value.trim().isEmpty) {
+                          return 'O e-mail é obrigatório';
                         }
-                        if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
-                          return 'Por favor, insira um e-mail válido';
+                        if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}  $').hasMatch(value.trim())) {
+                          return 'Digite um e-mail válido';
                         }
                         return null;
                       },
@@ -193,7 +192,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
-                          return 'Por favor, insira sua senha';
+                          return 'A senha é obrigatória';
                         }
                         if (value.length < 6) {
                           return 'A senha deve ter pelo menos 6 caracteres';

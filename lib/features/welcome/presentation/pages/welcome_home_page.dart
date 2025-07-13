@@ -9,6 +9,8 @@ import '../../../profile/presentation/pages/perfil_intellimen.dart';
 import 'manifesto_page.dart';
 import '../../../auth/presentation/pages/login_page.dart';
 import '../../../auth/presentation/pages/signup_page.dart';
+import '../../../auth/presentation/pages/complete_profile_page.dart';
+import 'package:intellimen/shared/models/user_model.dart';
 
 class WelcomeHomePage extends StatefulWidget {
   const WelcomeHomePage({super.key});
@@ -788,6 +790,7 @@ class _WelcomeHomePageState extends State<WelcomeHomePage> {
           const SizedBox(height: 20),
           _buildMenuItem(Icons.login, 'Entrar', () => _handleLoginTap()),
           _buildMenuItem(Icons.person_add, 'Criar Conta', () => _handleSignupTap()),
+          _buildMenuItem(Icons.assignment_ind, 'Completar Perfil', () => _handleCompleteProfileTap()),
           _buildMenuItem(Icons.person, 'Perfil', () => _handleProfileTap()),
           _buildMenuItem(Icons.settings, 'Configurações', () => _handleSettingsTap()),
           _buildMenuItem(Icons.help, 'Ajuda', () => _handleHelpTap()),
@@ -970,6 +973,26 @@ class _WelcomeHomePageState extends State<WelcomeHomePage> {
     Navigator.pop(context);
     Navigator.of(context).push(
       MaterialPageRoute(builder: (context) => const SignupPage()),
+    );
+  }
+
+  void _handleCompleteProfileTap() {
+    Navigator.pop(context);
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => CompleteProfilePage(
+          userModel: UserModel(
+            id: 'teste',
+            name: 'Usuário Teste',
+            email: 'teste@email.com',
+            accessLevel: 'general',
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+            isActive: true,
+            hasCompletedProfile: false,
+          ),
+        ),
+      ),
     );
   }
 } 
