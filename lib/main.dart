@@ -6,6 +6,9 @@ import 'core/constants/app_colors.dart';
 import 'core/constants/app_constants.dart';
 import 'features/auth/presentation/pages/splash_page.dart';
 import 'features/welcome/presentation/pages/welcome_home_page.dart';
+import 'shared/providers/auth_provider.dart';
+import 'features/profile/presentation/pages/complete_profile_page.dart';
+import 'features/dashboard/presentation/pages/dashboard_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,11 +19,13 @@ void main() async {
   runApp(const ProviderScope(child: IntelliMenApp()));
 }
 
-class IntelliMenApp extends StatelessWidget {
+class IntelliMenApp extends ConsumerWidget {
   const IntelliMenApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authNotifierProvider);
+    
     return MaterialApp(
       title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
@@ -58,7 +63,22 @@ class IntelliMenApp extends StatelessWidget {
           fillColor: AppColors.lightGray,
         ),
       ),
-      home: const WelcomeHomePage(),
+      home: authState.when(
+        data: (user) {
+          if (user == null) {
+            // Usuário não autenticado - mostrar tela de welcome
+            return const WelcomeHomePage();
+          } else if (!user.hasCompletedProfile) {
+            // Usuário autenticado mas perfil incompleto
+            return CompleteProfilePage(userModel: user);
+          } else {
+            // Usuário autenticado e perfil completo - mostrar dashboard
+            return const DashboardPage();
+          }
+        },
+        loading: () => const SplashPage(),
+        error: (error, stackTrace) => const WelcomeHomePage(),
+      ),
     );
   }
 }

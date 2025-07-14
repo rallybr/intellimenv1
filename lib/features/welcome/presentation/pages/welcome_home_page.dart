@@ -11,15 +11,18 @@ import '../../../auth/presentation/pages/login_page.dart';
 import '../../../auth/presentation/pages/signup_page.dart';
 import '../../../auth/presentation/pages/complete_profile_page.dart';
 import 'package:intellimen/shared/models/user_model.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../shared/providers/auth_provider.dart';
+import '../../../../shared/providers/data_provider.dart';
 
-class WelcomeHomePage extends StatefulWidget {
+class WelcomeHomePage extends ConsumerStatefulWidget {
   const WelcomeHomePage({super.key});
 
   @override
-  State<WelcomeHomePage> createState() => _WelcomeHomePageState();
+  ConsumerState<WelcomeHomePage> createState() => _WelcomeHomePageState();
 }
 
-class _WelcomeHomePageState extends State<WelcomeHomePage> {
+class _WelcomeHomePageState extends ConsumerState<WelcomeHomePage> {
   int _selectedTab = 1; // 0: Academy, 1: IntelliMen, 2: Campus
   int _currentBanner = 0;
   bool _isLoading = false;
@@ -273,51 +276,206 @@ class _WelcomeHomePageState extends State<WelcomeHomePage> {
 
 
   Widget _buildAvatarItem(int index) {
-    return MouseRegion(
-      onEnter: (_) => _pauseAvatarAutoScroll(),
-      onExit: (_) => _resumeAvatarAutoScroll(),
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 14),
-        child: SizedBox(
-          height: WelcomeConstants.avatarRadius * 2 + 16,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: [
-              CircleAvatar(
-                radius: WelcomeConstants.avatarRadius,
-                backgroundColor: Colors.white,
-                child: CircleAvatar(
-                  radius: WelcomeConstants.avatarInnerRadius,
-                  backgroundColor: const Color(0xFFE3F6FF),
-                  backgroundImage: NetworkImage(WelcomeConstants.avatarUrls[index]),
-                ),
-              ),
-              const SizedBox(height: 2),
-              Expanded(
-                child: Align(
-                  alignment: Alignment.topCenter,
+    return Consumer(
+      builder: (context, ref, child) {
+        final activeUsersAsync = ref.watch(activeUsersProvider);
+        
+        return activeUsersAsync.when(
+          data: (users) {
+            if (users.isEmpty) {
+              // Fallback para dados mockados se não houver usuários
+              return MouseRegion(
+                onEnter: (_) => _pauseAvatarAutoScroll(),
+                onExit: (_) => _resumeAvatarAutoScroll(),
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 14),
                   child: SizedBox(
-                    width: WelcomeConstants.avatarRadius * 2 + 10,
-                    child: Text(
-                      WelcomeConstants.avatarNames[index],
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        shadows: [Shadow(blurRadius: 2, color: Colors.black)],
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
+                    height: WelcomeConstants.avatarRadius * 2 + 16,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: [
+                        CircleAvatar(
+                          radius: WelcomeConstants.avatarRadius,
+                          backgroundColor: Colors.white,
+                          child: CircleAvatar(
+                            radius: WelcomeConstants.avatarInnerRadius,
+                            backgroundColor: const Color(0xFFE3F6FF),
+                            backgroundImage: NetworkImage(WelcomeConstants.avatarUrls[index % WelcomeConstants.avatarUrls.length]),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.topCenter,
+                            child: SizedBox(
+                              width: WelcomeConstants.avatarRadius * 2 + 10,
+                              child: Text(
+                                WelcomeConstants.avatarNames[index % WelcomeConstants.avatarNames.length],
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  shadows: [Shadow(blurRadius: 2, color: Colors.black)],
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                      ],
                     ),
                   ),
                 ),
+              );
+            }
+            
+            final user = users[index % users.length];
+            return MouseRegion(
+              onEnter: (_) => _pauseAvatarAutoScroll(),
+              onExit: (_) => _resumeAvatarAutoScroll(),
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 14),
+                child: SizedBox(
+                  height: WelcomeConstants.avatarRadius * 2 + 16,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      CircleAvatar(
+                        radius: WelcomeConstants.avatarRadius,
+                        backgroundColor: Colors.white,
+                        child: CircleAvatar(
+                          radius: WelcomeConstants.avatarInnerRadius,
+                          backgroundColor: const Color(0xFFE3F6FF),
+                          backgroundImage: user.photoUrl != null 
+                              ? NetworkImage(user.photoUrl!)
+                              : NetworkImage(WelcomeConstants.defaultAvatarUrl),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.topCenter,
+                          child: SizedBox(
+                            width: WelcomeConstants.avatarRadius * 2 + 10,
+                            child: Text(
+                              user.name,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                shadows: [Shadow(blurRadius: 2, color: Colors.black)],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                    ],
+                  ),
+                ),
               ),
-              const SizedBox(height: 5),
-            ],
+            );
+          },
+          loading: () => MouseRegion(
+            onEnter: (_) => _pauseAvatarAutoScroll(),
+            onExit: (_) => _resumeAvatarAutoScroll(),
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 14),
+              child: SizedBox(
+                height: WelcomeConstants.avatarRadius * 2 + 16,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    CircleAvatar(
+                      radius: WelcomeConstants.avatarRadius,
+                      backgroundColor: Colors.white,
+                      child: CircleAvatar(
+                        radius: WelcomeConstants.avatarInnerRadius,
+                        backgroundColor: const Color(0xFFE3F6FF),
+                        backgroundImage: NetworkImage(WelcomeConstants.avatarUrls[index % WelcomeConstants.avatarUrls.length]),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: SizedBox(
+                          width: WelcomeConstants.avatarRadius * 2 + 10,
+                          child: Text(
+                            WelcomeConstants.avatarNames[index % WelcomeConstants.avatarNames.length],
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              shadows: [Shadow(blurRadius: 2, color: Colors.black)],
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                  ],
+                ),
+              ),
+            ),
           ),
-        ),
-      ),
+          error: (error, stackTrace) => MouseRegion(
+            onEnter: (_) => _pauseAvatarAutoScroll(),
+            onExit: (_) => _resumeAvatarAutoScroll(),
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 14),
+              child: SizedBox(
+                height: WelcomeConstants.avatarRadius * 2 + 16,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    CircleAvatar(
+                      radius: WelcomeConstants.avatarRadius,
+                      backgroundColor: Colors.white,
+                      child: CircleAvatar(
+                        radius: WelcomeConstants.avatarInnerRadius,
+                        backgroundColor: const Color(0xFFE3F6FF),
+                        backgroundImage: NetworkImage(WelcomeConstants.avatarUrls[index % WelcomeConstants.avatarUrls.length]),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: SizedBox(
+                          width: WelcomeConstants.avatarRadius * 2 + 10,
+                          child: Text(
+                            WelcomeConstants.avatarNames[index % WelcomeConstants.avatarNames.length],
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              shadows: [Shadow(blurRadius: 2, color: Colors.black)],
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -1012,22 +1170,35 @@ class _WelcomeHomePageState extends State<WelcomeHomePage> {
 
   void _handleCompleteProfileTap() {
     Navigator.pop(context);
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => CompleteProfilePage(
-          userModel: UserModel(
-            id: 'teste',
-            name: 'Usuário Teste',
-            email: 'teste@email.com',
-            accessLevel: 'general',
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-            isActive: true,
-            hasCompletedProfile: false,
+    
+    final currentUser = ref.read(currentUserDataProvider).value;
+    if (currentUser != null) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => CompleteProfilePage(
+            userModel: currentUser,
           ),
         ),
-      ),
-    );
+      );
+    } else {
+      // Fallback para usuário de teste se não houver usuário autenticado
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => CompleteProfilePage(
+            userModel: UserModel(
+              id: 'teste',
+              name: 'Usuário Teste',
+              email: 'teste@email.com',
+              accessLevel: 'general',
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+              isActive: true,
+              hasCompletedProfile: false,
+            ),
+          ),
+        ),
+      );
+    }
   }
 } 
 
