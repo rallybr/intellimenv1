@@ -231,15 +231,19 @@ class _WelcomeHomePageState extends State<WelcomeHomePage> {
                 ),
               ),
               _buildGradientLine(Alignment.topCenter),
+              const SizedBox(height: 10),
               Align(
                 alignment: Alignment.center,
-                child: ListView.builder(
-                  controller: _avatarScrollController,
-                  scrollDirection: Axis.horizontal,
-                  physics: const NeverScrollableScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 32),
-                  itemCount: 10000, // Repete infinitamente
-                  itemBuilder: (context, index) => _buildAvatarItem(index % WelcomeConstants.avatarUrls.length),
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: ListView.builder(
+                    controller: _avatarScrollController,
+                    scrollDirection: Axis.horizontal,
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    itemCount: 10000, // Repete infinitamente
+                    itemBuilder: (context, index) => _buildAvatarItem(index % WelcomeConstants.avatarUrls.length),
+                  ),
                 ),
               ),
               _buildGradientLine(Alignment.bottomCenter),
@@ -274,13 +278,43 @@ class _WelcomeHomePageState extends State<WelcomeHomePage> {
       onExit: (_) => _resumeAvatarAutoScroll(),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 14),
-        child: CircleAvatar(
-          radius: WelcomeConstants.avatarRadius,
-          backgroundColor: Colors.white,
-          child: CircleAvatar(
-            radius: WelcomeConstants.avatarInnerRadius,
-            backgroundColor: const Color(0xFFE3F6FF),
-            backgroundImage: NetworkImage(WelcomeConstants.avatarUrls[index]),
+        child: SizedBox(
+          height: WelcomeConstants.avatarRadius * 2 + 16,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: WelcomeConstants.avatarRadius,
+                backgroundColor: Colors.white,
+                child: CircleAvatar(
+                  radius: WelcomeConstants.avatarInnerRadius,
+                  backgroundColor: const Color(0xFFE3F6FF),
+                  backgroundImage: NetworkImage(WelcomeConstants.avatarUrls[index]),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: SizedBox(
+                    width: WelcomeConstants.avatarRadius * 2 + 10,
+                    child: Text(
+                      WelcomeConstants.avatarNames[index],
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        shadows: [Shadow(blurRadius: 2, color: Colors.black)],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 5),
+            ],
           ),
         ),
       ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/services/supabase_service.dart';
@@ -67,9 +68,26 @@ class _CompleteProfilePageState extends ConsumerState<CompleteProfilePage> {
                   Navigator.of(context).pop();
                   final pickedFile = await picker.pickImage(source: ImageSource.camera);
                   if (pickedFile != null) {
-                    setState(() {
-                      _userPhoto = File(pickedFile.path);
-                    });
+                    final croppedFile = await ImageCropper().cropImage(
+                      sourcePath: pickedFile.path,
+                      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+                      uiSettings: [
+                        AndroidUiSettings(
+                          toolbarTitle: 'Cortar imagem',
+                          toolbarColor: Colors.black,
+                          toolbarWidgetColor: Colors.white,
+                          lockAspectRatio: false,
+                        ),
+                        IOSUiSettings(
+                          title: 'Cortar imagem',
+                        ),
+                      ],
+                    );
+                    if (croppedFile != null) {
+                      setState(() {
+                        _userPhoto = File(croppedFile.path);
+                      });
+                    }
                   }
                 },
               ),
@@ -80,9 +98,26 @@ class _CompleteProfilePageState extends ConsumerState<CompleteProfilePage> {
                   Navigator.of(context).pop();
                   final pickedFile = await picker.pickImage(source: ImageSource.gallery);
                   if (pickedFile != null) {
-                    setState(() {
-                      _userPhoto = File(pickedFile.path);
-                    });
+                    final croppedFile = await ImageCropper().cropImage(
+                      sourcePath: pickedFile.path,
+                      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+                      uiSettings: [
+                        AndroidUiSettings(
+                          toolbarTitle: 'Cortar imagem',
+                          toolbarColor: Colors.black,
+                          toolbarWidgetColor: Colors.white,
+                          lockAspectRatio: false,
+                        ),
+                        IOSUiSettings(
+                          title: 'Cortar imagem',
+                        ),
+                      ],
+                    );
+                    if (croppedFile != null) {
+                      setState(() {
+                        _userPhoto = File(croppedFile.path);
+                      });
+                    }
                   }
                 },
               ),

@@ -156,4 +156,17 @@ class WelcomeConstants {
     'https://randomuser.me/api/portraits/men/9.jpg',
     'https://randomuser.me/api/portraits/men/10.jpg',
   ];
+  // Lista de nomes dos usuários (deve ter o mesmo tamanho e ordem de avatarUrls)
+  static const List<String> avatarNames = [
+    'João',
+    'Carlos',
+    'Pedro',
+    'Lucas',
+    'Mateus',
+    'Rafael',
+    'Bruno',
+    'Felipe',
+    'André',
+    'Gustavo',
+  ];
 } 
