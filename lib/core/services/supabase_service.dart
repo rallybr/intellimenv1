@@ -201,14 +201,33 @@ class SupabaseService {
 
   Future<List<UserChallengeModel>> getDesafiosDaDupla(String userId, String partnerId) async {
     try {
-      final response = await _client
+      print('Buscando desafios da dupla: userId=$userId, partnerId=$partnerId');
+      
+      // Buscar desafios onde o usuário é user_id e partner_id é o parceiro
+      final response1 = await _client
           .from('user_challenges')
           .select()
-          .or('and(user_id.eq.$userId,partner_id.eq.$partnerId),and(user_id.eq.$partnerId,partner_id.eq.$userId)')
+          .eq('user_id', userId)
+          .eq('partner_id', partnerId)
           .order('created_at');
-      if (response is List) {
+      
+      // Buscar desafios onde o usuário é partner_id e user_id é o parceiro
+      final response2 = await _client
+          .from('user_challenges')
+          .select()
+          .eq('user_id', partnerId)
+          .eq('partner_id', userId)
+          .order('created_at');
+      
+      print('Response1: $response1');
+      print('Response2: $response2');
+      
+      final allResponses = [...response1, ...response2];
+      print('Total de desafios encontrados: ${allResponses.length}');
+      
+      if (allResponses.isNotEmpty) {
         return List<UserChallengeModel>.from(
-          response
+          allResponses
             .whereType<Map<String, dynamic>>()
             .map((json) => UserChallengeModel.fromJson(json))
         );
@@ -216,6 +235,7 @@ class SupabaseService {
       return <UserChallengeModel>[];
     } catch (e) {
       developer.log('Erro ao buscar desafios da dupla: $e');
+      print('Erro ao buscar desafios da dupla: $e');
       return <UserChallengeModel>[];
     }
   }

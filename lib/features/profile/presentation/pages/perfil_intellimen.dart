@@ -97,16 +97,23 @@ class PerfilIntellimenPage extends ConsumerWidget {
     final userAsync = ref.watch(currentUserDataProvider);
     final convitesPendentesAsync = ref.watch(convitesPendentesProvider);
 
-    convitesPendentesAsync.whenData((convites) async {
+        convitesPendentesAsync.whenData((convites) async {
       if (convites != null && convites.isNotEmpty) {
         final convite = convites.first;
         // Buscar nome do desafiante
         final supabaseService = ref.read(supabaseServiceProvider);
         final desafiante = await supabaseService.getUser(convite['from_user_id']);
         final desafianteNome = desafiante?.name ?? 'outro usuário';
+        
+        // Verificar se o modal já está aberto
+        if (!context.mounted) return;
+        
         WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!context.mounted) return;
+          
           showDialog(
             context: context,
+            barrierDismissible: false,
             builder: (_) => AlertDialog(
               backgroundColor: Colors.white.withOpacity(0.95),
               shape: RoundedRectangleBorder(
@@ -137,21 +144,32 @@ class PerfilIntellimenPage extends ConsumerWidget {
               actionsPadding: const EdgeInsets.only(bottom: 12),
               actions: [
                 ElevatedButton(
-                                                  style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF000256),
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(18),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                                  textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF000256),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
                   onPressed: () async {
-                    await _aceitarDesafio(context, convite, ref);
-                    Navigator.of(context).pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Desafio aceito com sucesso!')),
-                    );
+                    try {
+                      await _aceitarDesafio(context, convite, ref);
+                      if (context.mounted) {
+                        Navigator.of(context).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Desafio aceito com sucesso!')),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        Navigator.of(context).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Erro ao aceitar desafio: $e')),
+                        );
+                      }
+                    }
                   },
                   child: const Text('Aceitar Desafio'),
                 ),
@@ -161,8 +179,22 @@ class PerfilIntellimenPage extends ConsumerWidget {
                     textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   onPressed: () async {
-                    await _recusarDesafio(context, convite, ref);
-                    Navigator.of(context).pop();
+                    try {
+                      await _recusarDesafio(context, convite, ref);
+                      if (context.mounted) {
+                        Navigator.of(context).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Desafio recusado')),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        Navigator.of(context).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Erro ao recusar desafio: $e')),
+                        );
+                      }
+                    }
                   },
                   child: const Text('Recusar Desafio'),
                 ),
@@ -222,46 +254,49 @@ class PerfilIntellimenPage extends ConsumerWidget {
                         const SizedBox(height: 170),
                         _buildProfileCard(context, user),
                         const SizedBox(height: 24),
-                        // NOVO: Botão e texto de adicionar desafio
-                        Center(
-                          child: Column(
-                            children: [
-                              ElevatedButton(
-                                onPressed: () {
-                                  // Abrir modal de postagem de desafio
-                                  _showPostagemDesafioModal(context, ref);
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  shape: const CircleBorder(),
-                                  backgroundColor: const Color(0xFF000256),
-                                  padding: const EdgeInsets.all(28),
-                                  elevation: 8,
-                                  shadowColor: Colors.black45,
+                        // NOVO: Botão e texto de adicionar desafio - apenas no próprio perfil
+                        if (isMeuPerfil)
+                          Center(
+                            child: Column(
+                              children: [
+                                ElevatedButton(
+                                  onPressed: () {
+                                    // Abrir modal de postagem de desafio
+                                    _showPostagemDesafioModal(context, ref);
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    shape: const CircleBorder(),
+                                    backgroundColor: const Color(0xFF000256),
+                                    padding: const EdgeInsets.all(28),
+                                    elevation: 8,
+                                    shadowColor: Colors.black45,
+                                  ),
+                                  child: const Icon(Icons.add, size: 48, color: Colors.white),
                                 ),
-                                child: const Icon(Icons.add, size: 48, color: Colors.white),
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                'ADICIONAR DESAFIO',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w900,
-                                  color: Colors.white,
-                                  letterSpacing: 1.2,
-                                  shadows: [
-                                    Shadow(
-                                      offset: const Offset(2, 2),
-                                      blurRadius: 4,
-                                      color: Colors.black.withOpacity(0.8),
-                                    ),
-                                  ],
+                                const SizedBox(height: 10),
+                                Text(
+                                  'ADICIONAR DESAFIO',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w900,
+                                    color: Colors.white,
+                                    letterSpacing: 1.2,
+                                    shadows: [
+                                      Shadow(
+                                        offset: const Offset(2, 2),
+                                        blurRadius: 4,
+                                        color: Colors.black.withOpacity(0.8),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
                         const SizedBox(height: 24),
-                        _buildDesafiosCarrosselReal(context, desafiosDupla, user, partnerId),
+                        // Mostrar carrossel apenas se for meu perfil ou se o usuário tiver parceiro
+                        if (isMeuPerfil || partnerId != null)
+                          _buildDesafiosCarrosselReal(context, desafiosDupla, user, partnerId),
                         const SizedBox(height: 24),
                         _buildQuizCarrossel(context),
                         const SizedBox(height: 24),
@@ -406,7 +441,7 @@ class PerfilIntellimenPage extends ConsumerWidget {
                       ],
                     )
                   : null,
-              bottomNavigationBar: _buildBottomNavBar(context),
+              bottomNavigationBar: _buildBottomNavBar(context, userLogado),
             );
           },
         );
@@ -595,9 +630,15 @@ class PerfilIntellimenPage extends ConsumerWidget {
 
   // Novo carrossel real dos desafios da dupla
   Widget _buildDesafiosCarrosselReal(BuildContext context, List<UserChallengeModel> desafios, UserModel user, String? partnerId) {
+    print('_buildDesafiosCarrosselReal chamado');
+    print('Desafios recebidos: ${desafios.length}');
+    print('PartnerId: $partnerId');
+    
     if (desafios.isEmpty || partnerId == null) {
+      print('Retornando SizedBox.shrink - desafios vazios ou partnerId null');
       return const SizedBox.shrink();
     }
+    
     final supabaseService = SupabaseService();
     final pageController = PageController(viewportFraction: 0.92);
     
@@ -608,6 +649,7 @@ class PerfilIntellimenPage extends ConsumerWidget {
           return const Center(child: CircularProgressIndicator());
         }
         final totalDesafios = snapshotChallenges.data!.length;
+        print('Total de desafios disponíveis: $totalDesafios');
         return _DesafiosCarrosselWidget(
           desafios: desafios,
           totalDesafios: totalDesafios,
@@ -1041,7 +1083,7 @@ class PerfilIntellimenPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildBottomNavBar(BuildContext context) {
+  Widget _buildBottomNavBar(BuildContext context, UserModel? userLogado) {
     return Container(
       height: 70,
       decoration: BoxDecoration(
@@ -1108,9 +1150,12 @@ class PerfilIntellimenPage extends ConsumerWidget {
                 ),
               );
             },
-            child: const CircleAvatar(
+            child: CircleAvatar(
               radius: 20,
-              backgroundImage: NetworkImage('https://randomuser.me/api/portraits/men/11.jpg'),
+              backgroundImage: NetworkImage(userLogado?.photoUrl ?? 'https://randomuser.me/api/portraits/men/11.jpg'),
+              onBackgroundImageError: (exception, stackTrace) {
+                // Tratamento de erro para imagem
+              },
             ),
           ),
         ],
@@ -1122,33 +1167,69 @@ class PerfilIntellimenPage extends ConsumerWidget {
     final supabaseService = ref.read(supabaseServiceProvider);
     final fromUserId = convite['from_user_id'] as String;
     final toUserId = convite['to_user_id'] as String;
-    // Atualiza status do convite
-    await supabaseService.client
-        .from('challenge_invites')
-        .update({'status': 'accepted'})
-        .eq('id', convite['id']);
-    // Atualiza partner_id dos dois usuários
-    await supabaseService.client.from('users').update({'partner_id': fromUserId}).eq('id', toUserId);
-    await supabaseService.client.from('users').update({'partner_id': toUserId}).eq('id', fromUserId);
-    // Busca os desafios reais do banco
-    final desafios = await supabaseService.getChallenges();
-    if (desafios.isNotEmpty) {
-      final primeiroDesafio = desafios.first;
-      await supabaseService.client.from('user_challenges').insert({
-        'user_id': fromUserId,
-        'partner_id': toUserId,
-        'challenge_id': primeiroDesafio.id,
-        'status': 'pending',
-      });
-      await supabaseService.client.from('user_challenges').insert({
-        'user_id': toUserId,
-        'partner_id': fromUserId,
-        'challenge_id': primeiroDesafio.id,
-        'status': 'pending',
-      });
+    
+    try {
+      // Atualiza status do convite
+      await supabaseService.client
+          .from('challenge_invites')
+          .update({'status': 'accepted'})
+          .eq('id', convite['id']);
+      
+      // Atualiza partner_id dos dois usuários
+      await supabaseService.client.from('users').update({'partner_id': fromUserId}).eq('id', toUserId);
+      await supabaseService.client.from('users').update({'partner_id': toUserId}).eq('id', fromUserId);
+      
+      // Busca os desafios reais do banco
+      final desafios = await supabaseService.getChallenges();
+      if (desafios.isNotEmpty) {
+        final primeiroDesafio = desafios.first;
+        
+        // Verificar se já existe desafio para estes usuários
+        final existingChallenges = await supabaseService.client
+            .from('user_challenges')
+            .select()
+            .eq('user_id', fromUserId)
+            .eq('partner_id', toUserId)
+            .eq('challenge_id', primeiroDesafio.id);
+        
+        // Só inserir se não existir
+        if (existingChallenges.isEmpty) {
+          await supabaseService.client.from('user_challenges').insert({
+            'user_id': fromUserId,
+            'partner_id': toUserId,
+            'challenge_id': primeiroDesafio.id,
+            'status': 'pending',
+          });
+        }
+        
+        // Verificar se já existe desafio para o segundo usuário
+        final existingChallenges2 = await supabaseService.client
+            .from('user_challenges')
+            .select()
+            .eq('user_id', toUserId)
+            .eq('partner_id', fromUserId)
+            .eq('challenge_id', primeiroDesafio.id);
+        
+        // Só inserir se não existir
+        if (existingChallenges2.isEmpty) {
+          await supabaseService.client.from('user_challenges').insert({
+            'user_id': toUserId,
+            'partner_id': fromUserId,
+            'challenge_id': primeiroDesafio.id,
+            'status': 'pending',
+          });
+        }
+      }
+      
+      // Força refresh do usuário logado para atualizar o partnerId
+      await ref.read(authNotifierProvider.notifier).refreshUserData();
+      
+    } catch (e) {
+      print('Erro ao aceitar desafio: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao aceitar desafio: $e')),
+      );
     }
-    // Força refresh do usuário logado para atualizar o partnerId
-    await ref.read(authNotifierProvider.notifier).refreshUserData();
   }
 
   Future<void> _recusarDesafio(BuildContext context, dynamic convite, WidgetRef ref) async {
@@ -1158,6 +1239,8 @@ class PerfilIntellimenPage extends ConsumerWidget {
         .update({'status': 'declined'})
         .eq('id', convite['id']);
   }
+
+
 
   void _showPostagemDesafioModal(BuildContext context, WidgetRef ref) async {
     final TextEditingController tituloController = TextEditingController();
@@ -1425,8 +1508,8 @@ class PerfilIntellimenPage extends ConsumerWidget {
                                     return;
                                   }
                                   // Salvar no banco
-                                  final user = ref.read(currentUserDataProvider).value;
-                                  if (user == null || user.partnerId == null) {
+                                  final currentUser = ref.read(currentUserDataProvider).value;
+                                  if (currentUser == null || currentUser.partnerId == null) {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(content: Text('Usuário/parceiro não encontrado!')),
                                     );
@@ -1441,23 +1524,71 @@ class PerfilIntellimenPage extends ConsumerWidget {
                                     return;
                                   }
                                   final supabaseService = ref.read(supabaseServiceProvider);
-                                  // Atualizar o registro existente do user_challenges para este usuário/parceiro/desafio
-                                  await supabaseService.client.from('user_challenges')
-                                    .update({
-                                      'notes': descricao,
-                                      'image_url': imageUrls.join(','),
-                                      'status': 'completed',
-                                      'completed_at': DateTime.now().toIso8601String(),
-                                    })
-                                    .eq('user_id', user.id)
-                                    .eq('partner_id', user.partnerId!)
-                                    .eq('challenge_id', desafioSelecionadoId!);
+                                  
+                                  // Verificar se já existe um registro para este desafio
+                                  try {
+                                    final existingRecord = await supabaseService.client
+                                        .from('user_challenges')
+                                        .select()
+                                        .eq('user_id', currentUser.id)
+                                        .eq('partner_id', currentUser.partnerId!)
+                                        .eq('challenge_id', desafioSelecionadoId!)
+                                        .maybeSingle();
+                                    
+                                    print('Registro existente: $existingRecord');
+                                    
+                                    if (existingRecord != null) {
+                                      // Atualizar o registro existente
+                                      print('Atualizando registro existente...');
+                                      await supabaseService.client.from('user_challenges')
+                                        .update({
+                                          'notes': descricao,
+                                          'image_url': imageUrls.join(','),
+                                          'status': 'completed',
+                                          'completed_at': DateTime.now().toIso8601String(),
+                                        })
+                                        .eq('id', existingRecord['id']);
+                                      print('Registro atualizado com sucesso!');
+                                    } else {
+                                      // Criar novo registro
+                                      print('Criando novo registro...');
+                                      await supabaseService.client.from('user_challenges').insert({
+                                        'user_id': currentUser.id,
+                                        'partner_id': currentUser.partnerId!,
+                                        'challenge_id': desafioSelecionadoId!,
+                                        'notes': descricao,
+                                        'image_url': imageUrls.join(','),
+                                        'status': 'completed',
+                                        'completed_at': DateTime.now().toIso8601String(),
+                                      });
+                                      print('Novo registro criado com sucesso!');
+                                    }
+                                  } catch (e) {
+                                    print('Erro ao salvar no banco: $e');
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Erro ao salvar desafio: $e')),
+                                    );
+                                    setState(() => isUploading = false);
+                                    return;
+                                  }
                                   setState(() => isUploading = false);
                                   Navigator.of(context).pop();
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(content: Text('Desafio postado com sucesso!')),
                                   );
-                                  await ref.read(authNotifierProvider.notifier).refreshUserData();
+                                  
+                                  // Forçar refresh dos dados
+                                  try {
+                                    await ref.read(authNotifierProvider.notifier).refreshUserData();
+                                    // Aguardar um pouco para garantir que os dados foram atualizados
+                                    await Future.delayed(const Duration(milliseconds: 500));
+                                    // Forçar rebuild da tela
+                                    if (context.mounted) {
+                                      setState(() {});
+                                    }
+                                  } catch (e) {
+                                    print('Erro ao atualizar dados: $e');
+                                  }
                                 },
                           child: isUploading
                               ? const SizedBox(
@@ -1502,6 +1633,7 @@ class _DesafiosCarrosselWidgetState extends State<_DesafiosCarrosselWidget> {
 
   @override
   Widget build(BuildContext context) {
+    print('_DesafiosCarrosselWidget build - ${widget.desafios.length} desafios');
     return Column(
       children: [
         SizedBox(
@@ -1516,6 +1648,7 @@ class _DesafiosCarrosselWidgetState extends State<_DesafiosCarrosselWidget> {
             },
             itemBuilder: (context, index) {
               final desafio = widget.desafios[index];
+              print('Construindo card para desafio $index: ${desafio.id}');
               return FutureBuilder(
                 future: Future.wait([
                   widget.supabaseService.getUser(desafio.userId),
@@ -1650,10 +1783,7 @@ class _DesafiosCarrosselWidgetState extends State<_DesafiosCarrosselWidget> {
                                   const SizedBox(height: 16),
                                   ElevatedButton(
                                     onPressed: () {
-                                      // TODO: Implementar ação de revisar desafio
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('Revisar desafio (em breve)')),
-                                      );
+                                      showEditarDesafioModal(context, widget.supabaseService, desafio, user1, user2);
                                     },
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: const Color(0xFF000256),
@@ -1759,6 +1889,264 @@ class _DesafiosCarrosselWidgetState extends State<_DesafiosCarrosselWidget> {
       ],
     );
   }
+}
+
+void showEditarDesafioModal(BuildContext context, SupabaseService supabaseService, UserChallengeModel desafio, UserModel user1, UserModel user2) async {
+  // Usar o desafio diretamente para edição
+  final userChallenge = desafio;
+
+  final TextEditingController descricaoController = TextEditingController(text: userChallenge.notes ?? '');
+  List<XFile> imagensSelecionadas = [];
+  bool isUploading = false;
+
+  showDialog(
+    context: context,
+    builder: (BuildContext context) {
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            backgroundColor: Colors.white.withOpacity(0.95),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            title: const Text(
+              'EDITAR DESAFIO',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF000256),
+                letterSpacing: 1.2,
+              ),
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: descricaoController,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      labelText: 'Descrição do Desafio',
+                      border: OutlineInputBorder(),
+                      filled: true,
+                      fillColor: Colors.white10,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey),
+                      borderRadius: BorderRadius.circular(8),
+                      color: Colors.grey[50],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Imagens do Desafio (até 3)',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        // TODO: Implementar visualização de imagens quando o campo image_url for adicionado ao modelo
+                        if (imagensSelecionadas.isNotEmpty)
+                          Wrap(
+                            spacing: 8,
+                            children: List.generate(imagensSelecionadas.length, (i) => Stack(
+                              alignment: Alignment.topRight,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.file(
+                                    File(imagensSelecionadas[i].path),
+                                    height: 80,
+                                    width: 80,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                                Positioned(
+                                  top: 0,
+                                  right: 0,
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        imagensSelecionadas.removeAt(i);
+                                      });
+                                    },
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: Colors.red,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: const Icon(Icons.close, color: Colors.white, size: 18),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )),
+                          ),
+                        if (imagensSelecionadas.length < 3)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 12.0),
+                            child: ElevatedButton.icon(
+                              onPressed: isUploading
+                                  ? null
+                                  : () async {
+                                      final picker = ImagePicker();
+                                      final option = await showDialog<String>(
+                                        context: context,
+                                        builder: (context) => AlertDialog(
+                                          title: const Text('Escolha uma opção'),
+                                          content: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              ListTile(
+                                                leading: const Icon(Icons.camera_alt),
+                                                title: const Text('Tirar foto'),
+                                                onTap: () => Navigator.of(context).pop('camera'),
+                                              ),
+                                              ListTile(
+                                                leading: const Icon(Icons.photo_library),
+                                                title: const Text('Selecionar da galeria'),
+                                                onTap: () => Navigator.of(context).pop('gallery'),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                      if (option == null) return;
+                                      XFile? picked;
+                                      if (option == 'camera') {
+                                        picked = await picker.pickImage(source: ImageSource.camera);
+                                      } else if (option == 'gallery') {
+                                        picked = await picker.pickImage(source: ImageSource.gallery);
+                                      }
+                                      if (picked != null) {
+                                        final XFile pickedFile = picked;
+                                        setState(() {
+                                          imagensSelecionadas.add(pickedFile);
+                                        });
+                                      }
+                                    },
+                              icon: const Icon(Icons.upload_file),
+                              label: const Text('Adicionar Imagem'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF000256),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                        },
+                        child: const Text('Cancelar'),
+                      ),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF000256),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: isUploading
+                            ? null
+                            : () async {
+                                final descricao = descricaoController.text.trim();
+                                if (descricao.isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('A descrição é obrigatória!')),
+                                  );
+                                  return;
+                                }
+                                setState(() => isUploading = true);
+                                List<String> imageUrls = [];
+                                
+                                // TODO: Implementar manutenção de imagens existentes quando o campo image_url for adicionado ao modelo
+                                
+                                try {
+                                  if (imagensSelecionadas.isNotEmpty) {
+                                    for (final img in imagensSelecionadas) {
+                                      final file = File(img.path);
+                                      final fileName = path.basename(img.path);
+                                      final url = await supabaseService.uploadFile(
+                                        file: file,
+                                        bucketName: 'desafio-images',
+                                        fileName: '${DateTime.now().millisecondsSinceEpoch}_$fileName',
+                                      );
+                                      if (url != null) imageUrls.add(url);
+                                    }
+                                  }
+                                } catch (e, st) {
+                                  print('Erro no upload: $e');
+                                  print(st);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Erro ao fazer upload: $e')),
+                                  );
+                                  setState(() => isUploading = false);
+                                  return;
+                                }
+                                
+                                // Atualizar o desafio
+                                await supabaseService.client.from('user_challenges')
+                                  .update({
+                                    'notes': descricao,
+                                    'image_url': imageUrls.join(','),
+                                  })
+                                  .eq('id', userChallenge.id);
+                                
+                                setState(() => isUploading = false);
+                                Navigator.of(context).pop();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Desafio atualizado com sucesso!')),
+                                );
+                                // TODO: Implementar refresh dos dados quando necessário
+                              },
+                        child: isUploading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Text('Salvar'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    },
+  );
 }
 
 class BuscaUsuarioModal extends ConsumerStatefulWidget {

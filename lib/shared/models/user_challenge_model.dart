@@ -7,6 +7,7 @@ class UserChallengeModel {
   final DateTime? startedAt;
   final DateTime? completedAt;
   final String? notes;
+  final String? imageUrl;
   final int? rating;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -20,6 +21,7 @@ class UserChallengeModel {
     this.startedAt,
     this.completedAt,
     this.notes,
+    this.imageUrl,
     this.rating,
     required this.createdAt,
     required this.updatedAt,
@@ -35,6 +37,7 @@ class UserChallengeModel {
       startedAt: json['started_at'] != null ? DateTime.tryParse(json['started_at']) : null,
       completedAt: json['completed_at'] != null ? DateTime.tryParse(json['completed_at']) : null,
       notes: json['notes'],
+      imageUrl: json['image_url'],
       rating: json['rating'],
       createdAt: DateTime.parse(json['created_at']),
       updatedAt: DateTime.parse(json['updated_at']),
@@ -51,6 +54,7 @@ class UserChallengeModel {
       'started_at': startedAt?.toIso8601String(),
       'completed_at': completedAt?.toIso8601String(),
       'notes': notes,
+      'image_url': imageUrl,
       'rating': rating,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
