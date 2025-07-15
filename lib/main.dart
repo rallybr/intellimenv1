@@ -7,7 +7,7 @@ import 'core/constants/app_constants.dart';
 import 'features/auth/presentation/pages/splash_page.dart';
 import 'features/welcome/presentation/pages/welcome_home_page.dart';
 import 'shared/providers/auth_provider.dart';
-import 'features/profile/presentation/pages/complete_profile_page.dart';
+import 'features/auth/presentation/pages/complete_profile_page.dart';
 import 'features/dashboard/presentation/pages/dashboard_page.dart';
 
 void main() async {

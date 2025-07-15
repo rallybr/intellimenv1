@@ -6,6 +6,8 @@ import '../../../../core/services/supabase_service.dart';
 import '../../../../shared/models/user_model.dart';
 import '../pages/complete_profile_page.dart';
 import '../../../welcome/presentation/pages/welcome_home_page.dart';
+import '../pages/email_confirmation_page.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SignupPage extends ConsumerStatefulWidget {
   const SignupPage({super.key});
@@ -41,41 +43,35 @@ class _SignupPageState extends ConsumerState<SignupPage> {
     });
 
     try {
-      // Criar conta no Supabase Auth
+      print('Iniciando cadastro...');
       final authResponse = await SupabaseService().signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text,
         name: _nameController.text.trim(),
       );
+      print('Resposta do Auth:  [32m${authResponse.user} [0m');
 
       if (authResponse.user != null) {
-        // Criar perfil do usuário no banco
-        final userModel = UserModel(
-          id: authResponse.user!.id,
-          name: _nameController.text.trim(),
-          email: _emailController.text.trim(),
-          accessLevel: AppConstants.accessGeneral,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-          isActive: true,
-          hasCompletedProfile: false,
-        );
-
-        await SupabaseService().createUser(userModel);
-
         if (mounted) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
-              builder: (context) => CompleteProfilePage(userModel: userModel),
+              builder: (context) => EmailConfirmationPage(
+                email: _emailController.text.trim(),
+                password: _passwordController.text,
+                name: _nameController.text.trim(),
+              ),
             ),
           );
         }
+      } else {
+        print('authResponse.user é null');
       }
     } catch (e) {
+      print('Erro no cadastro: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erro ao criar conta: ${e.toString()}'),
+            content: Text('Erro ao criar conta: $e'),
             backgroundColor: AppColors.error,
           ),
         );

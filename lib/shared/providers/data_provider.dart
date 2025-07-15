@@ -3,6 +3,8 @@ import '../../core/services/supabase_service.dart';
 import '../models/user_model.dart';
 import '../models/challenge_model.dart';
 import '../models/quiz_model.dart';
+import 'auth_provider.dart';
+import 'package:intellimen/shared/models/user_challenge_model.dart';
 
 // Provider para lista de usuários ativos (para o carrossel de avatares)
 final activeUsersProvider = FutureProvider<List<UserModel>>((ref) async {

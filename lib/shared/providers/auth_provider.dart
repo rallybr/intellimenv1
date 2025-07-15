@@ -59,6 +59,26 @@ final isAcademyEligibleProvider = Provider<bool>((ref) {
   return userData?.isTeen ?? false;
 });
 
+// Provider para convites pendentes recebidos pelo usuário logado
+final convitesPendentesProvider = StreamProvider.autoDispose((ref) {
+  final supabaseService = ref.watch(supabaseServiceProvider);
+  final user = ref.watch(currentUserProvider).value;
+  if (user == null) return const Stream.empty();
+  return supabaseService.client
+      .from('challenge_invites')
+      .stream(primaryKey: ['id'])
+      .map((rows) => rows.where((row) =>
+        row['to_user_id'] == user.id && row['status'] == 'pending'
+      ).toList());
+});
+
+// Provider para busca dinâmica de usuários por nome
+final buscaUsuariosProvider = FutureProvider.family<List<UserModel>, String>((ref, termo) async {
+  final supabaseService = ref.watch(supabaseServiceProvider);
+  if (termo.isEmpty) return [];
+  return await supabaseService.buscarUsuariosPorNome(termo);
+});
+
 // Notifier para gerenciar ações de autenticação
 class AuthNotifier extends StateNotifier<AsyncValue<UserModel?>> {
   final SupabaseService _supabaseService;

@@ -5,6 +5,7 @@ import '../../shared/models/user_model.dart';
 import '../../shared/models/challenge_model.dart';
 import '../../shared/models/quiz_model.dart';
 import '../config/supabase_config.dart';
+import 'package:intellimen/shared/models/user_challenge_model.dart';
 
 class SupabaseService {
   static final SupabaseService _instance = SupabaseService._internal();
@@ -124,6 +125,20 @@ class SupabaseService {
     }
   }
 
+  Future<List<UserModel>> buscarUsuariosPorNome(String termo) async {
+    try {
+      final response = await _client
+          .from('users')
+          .select()
+          .ilike('name', '$termo%')
+          .limit(20);
+      return response.map<UserModel>((json) => UserModel.fromJson(json)).toList();
+    } catch (e) {
+      developer.log('Erro ao buscar usuários por nome: $e');
+      return [];
+    }
+  }
+
   // =====================================================
   // DESAFIOS
   // =====================================================
@@ -182,6 +197,44 @@ class SupabaseService {
         .from('user_challenges')
         .update(userChallenge.toJson())
         .eq('id', userChallenge.id);
+  }
+
+  Future<List<UserChallengeModel>> getDesafiosDaDupla(String userId, String partnerId) async {
+    try {
+      final response = await _client
+          .from('user_challenges')
+          .select()
+          .or('and(user_id.eq.$userId,partner_id.eq.$partnerId),and(user_id.eq.$partnerId,partner_id.eq.$userId)')
+          .order('created_at');
+      if (response is List) {
+        return List<UserChallengeModel>.from(
+          response
+            .whereType<Map<String, dynamic>>()
+            .map((json) => UserChallengeModel.fromJson(json))
+        );
+      }
+      return <UserChallengeModel>[];
+    } catch (e) {
+      developer.log('Erro ao buscar desafios da dupla: $e');
+      return <UserChallengeModel>[];
+    }
+  }
+
+  Future<UserChallengeModel?> getUserChallenge(String userId, String partnerId, String challengeId) async {
+    try {
+      final response = await _client
+          .from('user_challenges')
+          .select()
+          .eq('user_id', userId)
+          .eq('partner_id', partnerId)
+          .eq('challenge_id', challengeId)
+          .maybeSingle();
+      if (response == null) return null;
+      return UserChallengeModel.fromJson(response);
+    } catch (e) {
+      developer.log('Erro ao buscar user_challenge: $e');
+      return null;
+    }
   }
 
   // =====================================================
@@ -401,6 +454,40 @@ class SupabaseService {
     } catch (e) {
       developer.log('Erro ao fazer upload do arquivo: $e');
       return null;
+    }
+  }
+
+  Future<String?> uploadUserProfilePhoto(String userId, File file) async {
+    final fileName = 'profile.jpg';
+    final filePath = '$userId/$fileName';
+    final storage = _client.storage.from('profile-photos');
+    final response = await storage.upload(filePath, file, fileOptions: const FileOptions(upsert: true));
+    if (response != null && response.isNotEmpty) {
+      // Gerar URL pública
+      final publicUrl = storage.getPublicUrl(filePath);
+      return publicUrl;
+    } else {
+      return null;
+    }
+  }
+
+  // =====================================================
+  // CONVITES DE DESAFIO
+  // =====================================================
+
+  Future<void> enviarConviteDesafio({
+    required String fromUserId,
+    required String toUserId,
+  }) async {
+    try {
+      await _client.from('challenge_invites').insert({
+        'from_user_id': fromUserId,
+        'to_user_id': toUserId,
+        'status': 'pending',
+      });
+    } catch (e) {
+      developer.log('Erro ao enviar convite de desafio: $e');
+      rethrow;
     }
   }
 } 

@@ -14,6 +14,7 @@ import 'package:intellimen/shared/models/user_model.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../shared/providers/auth_provider.dart';
 import '../../../../shared/providers/data_provider.dart';
+import '../../../auth/presentation/pages/email_confirmation_page.dart';
 
 class WelcomeHomePage extends ConsumerStatefulWidget {
   const WelcomeHomePage({super.key});
@@ -934,18 +935,31 @@ class _WelcomeHomePageState extends ConsumerState<WelcomeHomePage> {
   }
 
   Widget _buildProfileAvatar() {
-    return GestureDetector(
-      onTap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => const PerfilIntellimenPage(),
+    final userAsync = ref.watch(currentUserDataProvider);
+    return userAsync.when(
+      data: (user) {
+        if (user == null) {
+          return const CircleAvatar(
+            radius: WelcomeConstants.profileAvatarRadius,
+            backgroundImage: NetworkImage(WelcomeConstants.defaultAvatarUrl),
+          );
+        }
+        return GestureDetector(
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => const PerfilIntellimenPage(),
+              ),
+            );
+          },
+          child: CircleAvatar(
+            radius: WelcomeConstants.profileAvatarRadius,
+            backgroundImage: NetworkImage(user.photoUrl ?? WelcomeConstants.defaultAvatarUrl),
           ),
         );
       },
-      child: CircleAvatar(
-        radius: WelcomeConstants.profileAvatarRadius,
-        backgroundImage: NetworkImage(WelcomeConstants.defaultAvatarUrl),
-      ),
+      loading: () => const CircleAvatar(radius: WelcomeConstants.profileAvatarRadius),
+      error: (e, _) => const CircleAvatar(radius: WelcomeConstants.profileAvatarRadius),
     );
   }
 

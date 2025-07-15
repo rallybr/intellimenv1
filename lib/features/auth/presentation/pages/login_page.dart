@@ -5,6 +5,9 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../core/services/supabase_service.dart';
 import '../pages/home_page.dart';
 import '../../../welcome/presentation/pages/welcome_home_page.dart';
+import 'package:intellimen/shared/providers/auth_provider.dart';
+import 'package:intellimen/features/profile/presentation/pages/perfil_intellimen.dart';
+import 'package:intellimen/shared/models/user_model.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -35,21 +38,37 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     });
 
     try {
-      await SupabaseService().signIn(
+      await ref.read(authNotifierProvider.notifier).signIn(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
 
-      if (mounted) {
+      // Aguarda o usuário ser atualizado no provider (timeout de 2s)
+      UserModel? user;
+      final start = DateTime.now();
+      do {
+        await Future.delayed(const Duration(milliseconds: 100));
+        user = ref.read(currentUserDataProvider).value;
+        if (user != null) break;
+      } while (DateTime.now().difference(start) < const Duration(seconds: 2));
+
+      if (mounted && user != null) {
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const HomePage()),
+          MaterialPageRoute(builder: (context) => const PerfilIntellimenPage()),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Falha ao fazer login. Verifique suas credenciais.'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erro ao fazer login: ${e.toString()}'),
+            content: Text('Erro ao fazer login:  {e.toString()}'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -158,7 +177,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         if (value == null || value.trim().isEmpty) {
                           return 'O e-mail é obrigatório';
                         }
-                        if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}  $').hasMatch(value.trim())) {
+                        if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value.trim())) {
                           return 'Digite um e-mail válido';
                         }
                         return null;

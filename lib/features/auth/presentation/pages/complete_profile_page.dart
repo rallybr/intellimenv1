@@ -8,6 +8,8 @@ import '../../../../core/constants/app_constants.dart';
 import '../../../../core/services/supabase_service.dart';
 import '../../../../shared/models/user_model.dart';
 import '../pages/home_page.dart';
+import 'package:permission_handler/permission_handler.dart';
+import '../../../profile/presentation/pages/perfil_intellimen.dart';
 
 class CompleteProfilePage extends ConsumerStatefulWidget {
   final UserModel userModel;
@@ -53,79 +55,54 @@ class _CompleteProfilePageState extends ConsumerState<CompleteProfilePage> {
   }
 
   Future<void> _pickUserPhoto() async {
-    final picker = ImagePicker();
-    showModalBottomSheet(
-      context: context,
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.camera_alt),
-                title: const Text('Tirar foto'),
-                onTap: () async {
-                  Navigator.of(context).pop();
-                  final pickedFile = await picker.pickImage(source: ImageSource.camera);
-                  if (pickedFile != null) {
-                    final croppedFile = await ImageCropper().cropImage(
-                      sourcePath: pickedFile.path,
-                      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
-                      uiSettings: [
-                        AndroidUiSettings(
-                          toolbarTitle: 'Cortar imagem',
-                          toolbarColor: Colors.black,
-                          toolbarWidgetColor: Colors.white,
-                          lockAspectRatio: false,
-                        ),
-                        IOSUiSettings(
-                          title: 'Cortar imagem',
-                        ),
-                      ],
-                    );
-                    if (croppedFile != null) {
-                      setState(() {
-                        _userPhoto = File(croppedFile.path);
-                      });
-                    }
-                  }
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_library),
-                title: const Text('Escolher da galeria'),
-                onTap: () async {
-                  Navigator.of(context).pop();
-                  final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-                  if (pickedFile != null) {
-                    final croppedFile = await ImageCropper().cropImage(
-                      sourcePath: pickedFile.path,
-                      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
-                      uiSettings: [
-                        AndroidUiSettings(
-                          toolbarTitle: 'Cortar imagem',
-                          toolbarColor: Colors.black,
-                          toolbarWidgetColor: Colors.white,
-                          lockAspectRatio: false,
-                        ),
-                        IOSUiSettings(
-                          title: 'Cortar imagem',
-                        ),
-                      ],
-                    );
-                    if (croppedFile != null) {
-                      setState(() {
-                        _userPhoto = File(croppedFile.path);
-                      });
-                    }
-                  }
-                },
-              ),
-            ],
-          ),
+    try {
+      // Solicita permissões em tempo de execução
+      final cameraStatus = await Permission.camera.request();
+      final storageStatus = await Permission.photos.request(); // Para Android 13+
+      if (!cameraStatus.isGranted || !storageStatus.isGranted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Permissão negada para acessar a câmera/galeria')),
         );
-      },
-    );
+        return;
+      }
+
+      final picker = ImagePicker();
+      final source = await showModalBottomSheet<ImageSource>(
+        context: context,
+        builder: (context) {
+          return SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.camera_alt),
+                  title: const Text('Tirar foto'),
+                  onTap: () => Navigator.of(context).pop(ImageSource.camera),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.photo_library),
+                  title: const Text('Escolher da galeria'),
+                  onTap: () => Navigator.of(context).pop(ImageSource.gallery),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+
+      if (source != null) {
+        final pickedFile = await picker.pickImage(source: source);
+        if (pickedFile != null) {
+          setState(() {
+            _userPhoto = File(pickedFile.path);
+          });
+        }
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao selecionar foto: $e')),
+      );
+    }
   }
 
   Future<void> _completeProfile() async {
@@ -145,26 +122,34 @@ class _CompleteProfilePageState extends ConsumerState<CompleteProfilePage> {
     });
 
     try {
+      // Upload da foto de perfil
+      final userId = widget.userModel.id;
+      final photoUrl = await SupabaseService().uploadUserProfilePhoto(userId, _userPhoto!);
+      if (photoUrl == null) {
+        throw Exception('Erro ao fazer upload da foto de perfil');
+      }
+
       final updatedUser = widget.userModel.copyWith(
         whatsapp: _whatsappController.text.trim(),
         birthDate: _selectedDate,
         state: _selectedState,
         hasCompletedProfile: true,
         updatedAt: DateTime.now(),
+        photoUrl: photoUrl,
       );
 
       await SupabaseService().updateUser(updatedUser);
 
       if (mounted) {
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const HomePage()),
+          MaterialPageRoute(builder: (context) => const PerfilIntellimenPage()),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erro ao completar perfil: ${e.toString()}'),
+            content: Text('Erro ao completar perfil:  [31m$e [0m'),
             backgroundColor: AppColors.error,
           ),
         );
