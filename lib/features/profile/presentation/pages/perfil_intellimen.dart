@@ -78,7 +78,7 @@ class QuizConfronto {
 }
 
 final List<QuizConfronto> quizzes = List.generate(5, (i) => QuizConfronto(
-  titulo: 'BIBLE QUIZ',
+  titulo: 'RELEMBRANDO',
   nome1: 'Juan Lucas',
   url1: 'https://randomuser.me/api/portraits/men/13.jpg',
   pontos1: 5 + i,
