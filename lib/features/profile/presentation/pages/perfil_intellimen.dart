@@ -118,7 +118,7 @@ class PerfilIntellimenPage extends ConsumerWidget {
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF0A3D91),
+                  color: Color(0xFF000256),
                   letterSpacing: 1.2,
                 ),
               ),
@@ -137,15 +137,15 @@ class PerfilIntellimenPage extends ConsumerWidget {
               actionsPadding: const EdgeInsets.only(bottom: 12),
               actions: [
                 ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Color(0xFF0A3D91),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                    textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
+                                                  style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF000256),
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(18),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                  textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                ),
                   onPressed: () async {
                     await _aceitarDesafio(context, convite, ref);
                     Navigator.of(context).pop();
@@ -233,7 +233,7 @@ class PerfilIntellimenPage extends ConsumerWidget {
                                 },
                                 style: ElevatedButton.styleFrom(
                                   shape: const CircleBorder(),
-                                  backgroundColor: Color(0xFF002147),
+                                  backgroundColor: const Color(0xFF000256),
                                   padding: const EdgeInsets.all(28),
                                   elevation: 8,
                                   shadowColor: Colors.black45,
@@ -241,13 +241,20 @@ class PerfilIntellimenPage extends ConsumerWidget {
                                 child: const Icon(Icons.add, size: 48, color: Colors.white),
                               ),
                               const SizedBox(height: 10),
-                              const Text(
+                              Text(
                                 'ADICIONAR DESAFIO',
                                 style: TextStyle(
                                   fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF002147),
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.white,
                                   letterSpacing: 1.2,
+                                  shadows: [
+                                    Shadow(
+                                      offset: const Offset(2, 2),
+                                      blurRadius: 4,
+                                      color: Colors.black.withOpacity(0.8),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
@@ -389,7 +396,7 @@ class PerfilIntellimenPage extends ConsumerWidget {
                                   }
                                 }
                               },
-                              backgroundColor: const Color(0xFF002147),
+                              backgroundColor: const Color(0xFF000256),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(32),
                               ),
@@ -501,7 +508,7 @@ class PerfilIntellimenPage extends ConsumerWidget {
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF0A3D91),
+                        color: const Color(0xFF000256),
                         borderRadius: BorderRadius.circular(24),
                         boxShadow: [
                           BoxShadow(
@@ -546,9 +553,9 @@ class PerfilIntellimenPage extends ConsumerWidget {
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
                   colors: [
-                    Color(0xFF002BC4),
-                    Color(0xFF0088FF),
-                    Color(0xFF002BC4),
+                    Color(0xFF000256),
+                    Color(0xFF000256),
+                    Color(0xFF000256),
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -592,6 +599,8 @@ class PerfilIntellimenPage extends ConsumerWidget {
       return const SizedBox.shrink();
     }
     final supabaseService = SupabaseService();
+    final pageController = PageController(viewportFraction: 0.92);
+    
     return FutureBuilder<List<ChallengeModel>>(
       future: supabaseService.getChallenges(),
       builder: (context, snapshotChallenges) {
@@ -599,168 +608,11 @@ class PerfilIntellimenPage extends ConsumerWidget {
           return const Center(child: CircularProgressIndicator());
         }
         final totalDesafios = snapshotChallenges.data!.length;
-        return SizedBox(
-          height: 400, // altura aumentada para evitar rolagem
-          child: PageView.builder(
-            itemCount: desafios.length,
-            controller: PageController(viewportFraction: 0.92),
-            itemBuilder: (context, index) {
-              final desafio = desafios[index];
-              return FutureBuilder(
-                future: Future.wait([
-                  supabaseService.getUser(desafio.userId),
-                  supabaseService.getUser(desafio.partnerId),
-                  supabaseService.getUserChallenge(desafio.userId, desafio.partnerId, desafio.challengeId),
-                  supabaseService.getUserChallenge(desafio.partnerId, desafio.userId, desafio.challengeId),
-                ]),
-                builder: (context, AsyncSnapshot<List<dynamic>> snapshot) {
-                  if (!snapshot.hasData) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  final user1 = snapshot.data![0] as UserModel?;
-                  final user2 = snapshot.data![1] as UserModel?;
-                  final userChallenge1 = snapshot.data![2] as UserChallengeModel?;
-                  final userChallenge2 = snapshot.data![3] as UserChallengeModel?;
-                  if (user1 == null || user2 == null) {
-                    return const Center(child: Text('Erro ao carregar usuários'));
-                  }
-                  // Progresso: N de 53
-                  final progressoAtual = index + 1;
-                  final total = totalDesafios;
-
-                  // Buscar todos os desafios concluídos de cada usuário
-                  return FutureBuilder<List<UserChallengeModel>>(
-                    future: supabaseService.getUserChallenges(user1.id),
-                    builder: (context, snapshotUser1) {
-                      return FutureBuilder<List<UserChallengeModel>>(
-                        future: supabaseService.getUserChallenges(user2.id),
-                        builder: (context, snapshotUser2) {
-                          // Calcular progresso baseado nos desafios realmente concluídos
-                          int concluidosUser1 = 0;
-                          int concluidosUser2 = 0;
-                          
-                          if (snapshotUser1.hasData) {
-                            concluidosUser1 = snapshotUser1.data!
-                                .where((uc) => uc.status == 'completed' && uc.partnerId == user2.id)
-                                .length;
-                          }
-                          
-                          if (snapshotUser2.hasData) {
-                            concluidosUser2 = snapshotUser2.data!
-                                .where((uc) => uc.status == 'completed' && uc.partnerId == user1.id)
-                                .length;
-                          }
-                          
-                          double progressoBarra1 = concluidosUser1 / total;
-                          double progressoBarra2 = concluidosUser2 / total;
-                          
-                          // Status e progresso individuais
-                          String status1 = userChallenge1?.status == 'completed' ? 'CONCLUÍDO' : 'PENDENTE';
-                          String status2 = userChallenge2?.status == 'completed' ? 'CONCLUÍDO' : 'PENDENTE';
-                          
-                          return Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 16),
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFEE0E0E0),
-                              borderRadius: BorderRadius.circular(24),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.12),
-                                  blurRadius: 18,
-                                  offset: const Offset(0, 8),
-                                ),
-                              ],
-                            ),
-                            child: SingleChildScrollView(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    'DESAFIO #$progressoAtual',
-                                    style: const TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 2,
-                                      color: Color(0xFF232323),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Column(
-                                          children: [
-                                            _buildDesafioPerfil(
-                                              nome: user1.name,
-                                              url: user1.photoUrl ?? '',
-                                              progresso: progressoBarra1,
-                                              total: 1,
-                                              concluido: userChallenge1?.status == 'completed',
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text('$progressoAtual de $total', style: const TextStyle(fontSize: 14, color: Colors.black87)),
-                                            const SizedBox(height: 4),
-                                            Text(status1, style: TextStyle(fontSize: 14, color: status1 == 'CONCLUÍDO' ? Colors.green : Colors.red, fontWeight: FontWeight.bold)),
-                                          ],
-                                        ),
-                                      ),
-                                      Container(
-                                        width: 1,
-                                        height: 80,
-                                        color: Colors.grey[300],
-                                        margin: const EdgeInsets.symmetric(horizontal: 8),
-                                      ),
-                                      Expanded(
-                                        child: Column(
-                                          children: [
-                                            _buildDesafioPerfil(
-                                              nome: user2.name,
-                                              url: user2.photoUrl ?? '',
-                                              progresso: progressoBarra2,
-                                              total: 1,
-                                              concluido: userChallenge2?.status == 'completed',
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text('$progressoAtual de $total', style: const TextStyle(fontSize: 14, color: Colors.black87)),
-                                            const SizedBox(height: 4),
-                                            Text(status2, style: TextStyle(fontSize: 14, color: status2 == 'CONCLUÍDO' ? Colors.green : Colors.red, fontWeight: FontWeight.bold)),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 16),
-                                  ElevatedButton(
-                                    onPressed: () {
-                                      // TODO: Implementar ação de revisar desafio
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('Revisar desafio (em breve)')),
-                                      );
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF0A3D91),
-                                      foregroundColor: Colors.white,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                                      textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                                    ),
-                                    child: const Text('Revisar Desafio'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  );
-                },
-              );
-            },
-          ),
+        return _DesafiosCarrosselWidget(
+          desafios: desafios,
+          totalDesafios: totalDesafios,
+          pageController: pageController,
+          supabaseService: supabaseService,
         );
       },
     );
@@ -874,7 +726,7 @@ class PerfilIntellimenPage extends ConsumerWidget {
         Container(
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: Color(0xFF002BC4), width: 2),
+            border: Border.all(color: const Color(0xFF000256), width: 2),
           ),
           child: CircleAvatar(
             backgroundImage: NetworkImage(url),
@@ -1022,7 +874,7 @@ class PerfilIntellimenPage extends ConsumerWidget {
         Container(
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: Color(0xFF002BC4), width: 2),
+            border: Border.all(color: const Color(0xFF000256), width: 2),
           ),
           child: CircleAvatar(
             backgroundImage: NetworkImage(url),
@@ -1084,7 +936,7 @@ class PerfilIntellimenPage extends ConsumerWidget {
           child: const CircleAvatar(
             radius: 32,
             backgroundColor: Colors.white,
-            child: Icon(Icons.add, color: Color(0xFF0A3D91), size: 40),
+            child: Icon(Icons.add, color: const Color(0xFF000256), size: 40),
           ),
         ),
       ),
@@ -1141,7 +993,7 @@ class PerfilIntellimenPage extends ConsumerWidget {
                     height: 44,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Color(0xFF002BC4),
+                        backgroundColor: const Color(0xFF000256),
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(22),
@@ -1334,7 +1186,7 @@ class PerfilIntellimenPage extends ConsumerWidget {
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF0A3D91),
+                  color: Color(0xFF000256),
                   letterSpacing: 1.2,
                 ),
               ),
@@ -1494,7 +1346,7 @@ class PerfilIntellimenPage extends ConsumerWidget {
                                 icon: const Icon(Icons.upload_file),
                                 label: const Text('Adicionar Imagem'),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF0A3D91),
+                                  backgroundColor: const Color(0xFF000256),
                                   foregroundColor: Colors.white,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
@@ -1526,7 +1378,7 @@ class PerfilIntellimenPage extends ConsumerWidget {
                         ),
                         ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF0A3D91),
+                            backgroundColor: const Color(0xFF000256),
                             foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(18),
@@ -1624,6 +1476,287 @@ class PerfilIntellimenPage extends ConsumerWidget {
           },
         );
       },
+    );
+  }
+}
+
+class _DesafiosCarrosselWidget extends StatefulWidget {
+  final List<UserChallengeModel> desafios;
+  final int totalDesafios;
+  final PageController pageController;
+  final SupabaseService supabaseService;
+
+  const _DesafiosCarrosselWidget({
+    required this.desafios,
+    required this.totalDesafios,
+    required this.pageController,
+    required this.supabaseService,
+  });
+
+  @override
+  State<_DesafiosCarrosselWidget> createState() => _DesafiosCarrosselWidgetState();
+}
+
+class _DesafiosCarrosselWidgetState extends State<_DesafiosCarrosselWidget> {
+  int currentPage = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        SizedBox(
+          height: 400, // altura aumentada para evitar rolagem
+          child: PageView.builder(
+            itemCount: widget.desafios.length,
+            controller: widget.pageController,
+            onPageChanged: (index) {
+              setState(() {
+                currentPage = index;
+              });
+            },
+            itemBuilder: (context, index) {
+              final desafio = widget.desafios[index];
+              return FutureBuilder(
+                future: Future.wait([
+                  widget.supabaseService.getUser(desafio.userId),
+                  widget.supabaseService.getUser(desafio.partnerId),
+                  widget.supabaseService.getUserChallenge(desafio.userId, desafio.partnerId, desafio.challengeId),
+                  widget.supabaseService.getUserChallenge(desafio.partnerId, desafio.userId, desafio.challengeId),
+                ]),
+                builder: (context, AsyncSnapshot<List<dynamic>> snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final user1 = snapshot.data![0] as UserModel?;
+                  final user2 = snapshot.data![1] as UserModel?;
+                  final userChallenge1 = snapshot.data![2] as UserChallengeModel?;
+                  final userChallenge2 = snapshot.data![3] as UserChallengeModel?;
+                  if (user1 == null || user2 == null) {
+                    return const Center(child: Text('Erro ao carregar usuários'));
+                  }
+                  // Progresso: N de 53
+                  final progressoAtual = index + 1;
+                  final total = widget.totalDesafios;
+
+                  // Buscar todos os desafios concluídos de cada usuário
+                  return FutureBuilder<List<UserChallengeModel>>(
+                    future: widget.supabaseService.getUserChallenges(user1.id),
+                    builder: (context, snapshotUser1) {
+                      return FutureBuilder<List<UserChallengeModel>>(
+                        future: widget.supabaseService.getUserChallenges(user2.id),
+                        builder: (context, snapshotUser2) {
+                          // Calcular progresso baseado nos desafios realmente concluídos
+                          int concluidosUser1 = 0;
+                          int concluidosUser2 = 0;
+                          
+                          if (snapshotUser1.hasData) {
+                            concluidosUser1 = snapshotUser1.data!
+                                .where((uc) => uc.status == 'completed' && uc.partnerId == user2.id)
+                                .length;
+                          }
+                          
+                          if (snapshotUser2.hasData) {
+                            concluidosUser2 = snapshotUser2.data!
+                                .where((uc) => uc.status == 'completed' && uc.partnerId == user1.id)
+                                .length;
+                          }
+                          
+                          double progressoBarra1 = concluidosUser1 / total;
+                          double progressoBarra2 = concluidosUser2 / total;
+                          
+                          // Status e progresso individuais
+                          String status1 = userChallenge1?.status == 'completed' ? 'CONCLUÍDO' : 'PENDENTE';
+                          String status2 = userChallenge2?.status == 'completed' ? 'CONCLUÍDO' : 'PENDENTE';
+                          
+                          return Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 16),
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEE0E0E0),
+                              borderRadius: BorderRadius.circular(24),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.08),
+                                  blurRadius: 25,
+                                  offset: const Offset(0, 12),
+                                  spreadRadius: 2,
+                                ),
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.04),
+                                  blurRadius: 40,
+                                  offset: const Offset(0, 20),
+                                  spreadRadius: 4,
+                                ),
+                              ],
+                            ),
+                            child: SingleChildScrollView(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    'DESAFIO #$progressoAtual',
+                                    style: const TextStyle(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 2,
+                                      color: Color(0xFF232323),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          children: [
+                                            _buildDesafioPerfil(
+                                              nome: user1.name,
+                                              url: user1.photoUrl ?? '',
+                                              progresso: progressoBarra1,
+                                              total: 1,
+                                              concluido: userChallenge1?.status == 'completed',
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text('$progressoAtual de $total', style: const TextStyle(fontSize: 14, color: Colors.black87)),
+                                            const SizedBox(height: 4),
+                                            Text(status1, style: TextStyle(fontSize: 14, color: status1 == 'CONCLUÍDO' ? Colors.green : Colors.red, fontWeight: FontWeight.bold)),
+                                          ],
+                                        ),
+                                      ),
+                                      Container(
+                                        width: 1,
+                                        height: 80,
+                                        color: Colors.grey[300],
+                                        margin: const EdgeInsets.symmetric(horizontal: 8),
+                                      ),
+                                      Expanded(
+                                        child: Column(
+                                          children: [
+                                            _buildDesafioPerfil(
+                                              nome: user2.name,
+                                              url: user2.photoUrl ?? '',
+                                              progresso: progressoBarra2,
+                                              total: 1,
+                                              concluido: userChallenge2?.status == 'completed',
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text('$progressoAtual de $total', style: const TextStyle(fontSize: 14, color: Colors.black87)),
+                                            const SizedBox(height: 4),
+                                            Text(status2, style: TextStyle(fontSize: 14, color: status2 == 'CONCLUÍDO' ? Colors.green : Colors.red, fontWeight: FontWeight.bold)),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  ElevatedButton(
+                                    onPressed: () {
+                                      // TODO: Implementar ação de revisar desafio
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Revisar desafio (em breve)')),
+                                      );
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF000256),
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                                      textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                                    ),
+                                    child: const Text('Revisar Desafio'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  );
+                },
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 16),
+        // Indicadores de página (bolinhas) - apenas 10 fixas
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(10, (index) {
+            return Container(
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: index == currentPage ? const Color(0xFF000256) : Colors.grey[300],
+              ),
+            );
+          }),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDesafioPerfil({
+    required String nome,
+    required String url,
+    required double progresso,
+    required int total,
+    required bool concluido,
+  }) {
+    return Column(
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: const Color(0xFF000256), width: 2),
+          ),
+          child: CircleAvatar(
+            backgroundImage: NetworkImage(url),
+            radius: 32,
+            onBackgroundImageError: (exception, stackTrace) {
+              // Tratamento de erro para imagem
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          nome,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10), // borda arredondada
+          child: LinearProgressIndicator(
+            value: progresso,
+            backgroundColor: Colors.grey[200],
+            color: concluido ? Colors.green : Colors.red,
+            minHeight: 20, // altura maior
+          ),
+        ),
+        const SizedBox(height: 4),
+        // O texto "N de 53" já está fora deste widget, então pode remover aqui
+        const SizedBox(height: 4),
+        Text(
+          concluido ? 'CONCLUÍDO' : 'PENDENTE',
+          style: TextStyle(
+            fontSize: 14,
+            color: concluido ? Colors.green : Colors.red,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Icon(
+          concluido ? Icons.check_circle : Icons.cancel,
+          color: concluido ? Colors.green : Colors.red,
+          size: 35,
+        ),
+      ],
     );
   }
 }
