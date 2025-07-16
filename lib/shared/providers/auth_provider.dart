@@ -171,7 +171,29 @@ class AuthNotifier extends StateNotifier<AsyncValue<UserModel?>> {
   Future<void> refreshUserData() async {
     final user = _supabaseService.currentUser;
     if (user != null) {
-      await _loadUserData(user.id);
+      print('DEBUG REFRESH: Refreshing user data for ${user.id}');
+      try {
+        // Forçar busca direta do banco
+        final userData = await _supabaseService.getUser(user.id);
+        print('DEBUG REFRESH: userData.partnerId = ${userData?.partnerId}');
+        
+        // Verificar diretamente no banco também
+        try {
+          final userDireto = await _supabaseService.client
+              .from('users')
+              .select()
+              .eq('id', user.id)
+              .single();
+          print('DEBUG REFRESH: userDireto.partner_id = ${userDireto['partner_id']}');
+        } catch (e) {
+          print('DEBUG REFRESH: Erro ao verificar diretamente no banco: $e');
+        }
+        
+        state = AsyncValue.data(userData);
+      } catch (error, stackTrace) {
+        print('DEBUG REFRESH: Error refreshing user data: $error');
+        state = AsyncValue.error(error, stackTrace);
+      }
     }
   }
 }

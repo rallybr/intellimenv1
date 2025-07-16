@@ -100,6 +100,7 @@ class PerfilIntellimenPage extends ConsumerWidget {
         convitesPendentesAsync.whenData((convites) async {
       if (convites != null && convites.isNotEmpty) {
         final convite = convites.first;
+        
         // Buscar nome do desafiante
         final supabaseService = ref.read(supabaseServiceProvider);
         final desafiante = await supabaseService.getUser(convite['from_user_id']);
@@ -154,8 +155,11 @@ class PerfilIntellimenPage extends ConsumerWidget {
                     textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   onPressed: () async {
+                    print('DEBUG MODAL: Botão "Aceitar Desafio" pressionado');
                     try {
+                      print('DEBUG MODAL: Chamando _aceitarDesafio...');
                       await _aceitarDesafio(context, convite, ref);
+                      print('DEBUG MODAL: _aceitarDesafio concluído com sucesso');
                       if (context.mounted) {
                         Navigator.of(context).pop();
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -163,6 +167,7 @@ class PerfilIntellimenPage extends ConsumerWidget {
                         );
                       }
                     } catch (e) {
+                      print('DEBUG MODAL: Erro em _aceitarDesafio: $e');
                       if (context.mounted) {
                         Navigator.of(context).pop();
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -223,10 +228,86 @@ class PerfilIntellimenPage extends ConsumerWidget {
         // Buscar desafios da dupla se houver parceiro
         final supabaseService = ref.read(supabaseServiceProvider);
         final partnerId = user.partnerId;
+        
+        // Forçar refresh dos dados do usuário se necessário
+        if (isMeuPerfil && userLogado != null && userLogado.partnerId != user.partnerId) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            ref.read(authNotifierProvider.notifier).refreshUserData();
+          });
+        }
+        
+        // Verificar se o usuário deveria ter parceiro mas não tem
+        if (isMeuPerfil && userLogado != null && userLogado.partnerId == null) {
+                      // Verificar se há convites aceitos que não foram processados
+            WidgetsBinding.instance.addPostFrameCallback((_) async {
+              try {
+                final supabaseService = ref.read(supabaseServiceProvider);
+                
+                final convitesAceitos = await supabaseService.client
+                    .from('challenge_invites')
+                    .select()
+                    .or('from_user_id.eq.${userLogado.id},to_user_id.eq.${userLogado.id}')
+                    .eq('status', 'accepted');
+              
+              if (convitesAceitos.isNotEmpty) {
+                // Corrigir dados dos usuários baseado nos convites aceitos
+                for (final convite in convitesAceitos) {
+                  final fromUserId = convite['from_user_id'] as String;
+                  final toUserId = convite['to_user_id'] as String;
+                  
+                  // Verificar se os usuários já têm partner_id
+                  final user1 = await supabaseService.client
+                      .from('users')
+                      .select()
+                      .eq('id', fromUserId)
+                      .single();
+                  final user2 = await supabaseService.client
+                      .from('users')
+                      .select()
+                      .eq('id', toUserId)
+                      .single();
+                  
+                  // Atualizar partner_id se necessário
+                  if (user1['partner_id'] == null) {
+                    await supabaseService.client
+                        .from('users')
+                        .update({'partner_id': toUserId})
+                        .eq('id', fromUserId);
+                  }
+                  
+                  if (user2['partner_id'] == null) {
+                    await supabaseService.client
+                        .from('users')
+                        .update({'partner_id': fromUserId})
+                        .eq('id', toUserId);
+                  }
+                }
+                
+                await ref.read(authNotifierProvider.notifier).refreshUserData();
+              }
+                          } catch (e) {
+                // Erro silencioso para não poluir os logs
+              }
+          });
+        }
+        
+        // Se o usuário logado não tem parceiro mas deveria ter, forçar refresh
+        if (isMeuPerfil && userLogado != null && userLogado.partnerId == null) {
+          // Verificar se há convites aceitos pendentes
+          final convitesPendentes = ref.read(convitesPendentesProvider).value;
+          if (convitesPendentes != null && convitesPendentes.isNotEmpty) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              ref.read(authNotifierProvider.notifier).refreshUserData();
+            });
+          }
+        }
+        
         return FutureBuilder<List<UserChallengeModel>>(
           future: (partnerId != null)
               ? supabaseService.getDesafiosDaDupla(user.id, partnerId) as Future<List<UserChallengeModel>>
-              : Future.value(<UserChallengeModel>[]),
+              : (isMeuPerfil && userLogado != null && userLogado.partnerId == null)
+                  ? _buscarDadosAtualizadosEVerificarDesafios(userLogado.id, supabaseService)
+                  : Future.value(<UserChallengeModel>[]),
           builder: (context, snapshot) {
             final desafiosDupla = snapshot.data ?? <UserChallengeModel>[];
             return Scaffold(
@@ -630,13 +711,51 @@ class PerfilIntellimenPage extends ConsumerWidget {
 
   // Novo carrossel real dos desafios da dupla
   Widget _buildDesafiosCarrosselReal(BuildContext context, List<UserChallengeModel> desafios, UserModel user, String? partnerId) {
-    print('_buildDesafiosCarrosselReal chamado');
-    print('Desafios recebidos: ${desafios.length}');
-    print('PartnerId: $partnerId');
-    
     if (desafios.isEmpty || partnerId == null) {
-      print('Retornando SizedBox.shrink - desafios vazios ou partnerId null');
-      return const SizedBox.shrink();
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEE0E0E0),
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 25,
+              offset: const Offset(0, 12),
+              spreadRadius: 2,
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Icon(
+              Icons.sports_mma,
+              size: 48,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Nenhum desafio encontrado',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[600],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Complete desafios com seu parceiro para ver o progresso aqui',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[500],
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
     }
     
     final supabaseService = SupabaseService();
@@ -646,10 +765,39 @@ class PerfilIntellimenPage extends ConsumerWidget {
       future: supabaseService.getChallenges(),
       builder: (context, snapshotChallenges) {
         if (!snapshotChallenges.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEE0E0E0),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 25,
+                  offset: const Offset(0, 12),
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: const Center(
+              child: Column(
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text(
+                    'Carregando desafios...',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
         }
         final totalDesafios = snapshotChallenges.data!.length;
-        print('Total de desafios disponíveis: $totalDesafios');
         return _DesafiosCarrosselWidget(
           desafios: desafios,
           totalDesafios: totalDesafios,
@@ -1168,16 +1316,93 @@ class PerfilIntellimenPage extends ConsumerWidget {
     final fromUserId = convite['from_user_id'] as String;
     final toUserId = convite['to_user_id'] as String;
     
+    print('DEBUG ACEITAR: fromUserId = $fromUserId');
+    print('DEBUG ACEITAR: toUserId = $toUserId');
+    
     try {
+      // Verificar se o convite existe e está pendente
+      final conviteExistente = await supabaseService.client
+          .from('challenge_invites')
+          .select()
+          .eq('id', convite['id'])
+          .single();
+      
+      print('DEBUG ACEITAR: Convite encontrado: ${conviteExistente['status']}');
+      
+      if (conviteExistente['status'] != 'pending') {
+        print('DEBUG ACEITAR: Convite já não está pendente!');
+        return;
+      }
+      
       // Atualiza status do convite
       await supabaseService.client
           .from('challenge_invites')
           .update({'status': 'accepted'})
           .eq('id', convite['id']);
       
+      print('DEBUG ACEITAR: Status do convite atualizado');
+      
+      // Verificar dados dos usuários ANTES da atualização
+      final user1Antes = await supabaseService.getUser(toUserId);
+      final user2Antes = await supabaseService.getUser(fromUserId);
+      print('DEBUG ACEITAR: ANTES - user1.partnerId = ${user1Antes?.partnerId}');
+      print('DEBUG ACEITAR: ANTES - user2.partnerId = ${user2Antes?.partnerId}');
+      
+      // Verificar estrutura da tabela
+      try {
+        final estruturaTabela = await supabaseService.client
+            .from('users')
+            .select()
+            .limit(1)
+            .single();
+        print('DEBUG ACEITAR: Estrutura da tabela users:');
+        estruturaTabela.forEach((key, value) {
+          print('DEBUG ACEITAR:   $key: $value (${value.runtimeType})');
+        });
+        print('DEBUG ACEITAR: Campo partner_id existe: ${estruturaTabela.containsKey('partner_id')}');
+      } catch (e) {
+        print('DEBUG ACEITAR: Erro ao verificar estrutura da tabela: $e');
+      }
+      
       // Atualiza partner_id dos dois usuários
-      await supabaseService.client.from('users').update({'partner_id': fromUserId}).eq('id', toUserId);
-      await supabaseService.client.from('users').update({'partner_id': toUserId}).eq('id', fromUserId);
+      print('DEBUG ACEITAR: Atualizando partner_id do usuário $toUserId para $fromUserId');
+      final updateResult1 = await supabaseService.client
+          .from('users')
+          .update({'partner_id': fromUserId})
+          .eq('id', toUserId);
+      print('DEBUG ACEITAR: Resultado update1 = $updateResult1');
+      
+      print('DEBUG ACEITAR: Atualizando partner_id do usuário $fromUserId para $toUserId');
+      final updateResult2 = await supabaseService.client
+          .from('users')
+          .update({'partner_id': toUserId})
+          .eq('id', fromUserId);
+      print('DEBUG ACEITAR: Resultado update2 = $updateResult2');
+      
+      // Verificar se a atualização funcionou
+      final user1Atualizado = await supabaseService.getUser(toUserId);
+      final user2Atualizado = await supabaseService.getUser(fromUserId);
+      print('DEBUG ACEITAR: DEPOIS - user1.partnerId = ${user1Atualizado?.partnerId}');
+      print('DEBUG ACEITAR: DEPOIS - user2.partnerId = ${user2Atualizado?.partnerId}');
+      
+      // Verificar diretamente no banco
+      final userDireto1 = await supabaseService.client
+          .from('users')
+          .select()
+          .eq('id', toUserId)
+          .single();
+      print('DEBUG ACEITAR: userDireto1.partner_id = ${userDireto1['partner_id']}');
+      print('DEBUG ACEITAR: userDireto1 completo = $userDireto1');
+      
+      final userDireto2 = await supabaseService.client
+          .from('users')
+          .select()
+          .eq('id', fromUserId)
+          .single();
+      print('DEBUG ACEITAR: userDireto2.partner_id = ${userDireto2['partner_id']}');
+      print('DEBUG ACEITAR: userDireto2 completo = $userDireto2');
+      
+      print('DEBUG ACEITAR: partner_id dos usuários atualizado');
       
       // Busca os desafios reais do banco
       final desafios = await supabaseService.getChallenges();
@@ -1222,7 +1447,22 @@ class PerfilIntellimenPage extends ConsumerWidget {
       }
       
       // Força refresh do usuário logado para atualizar o partnerId
+      print('DEBUG ACEITAR: Forçando refresh dos dados do usuário...');
       await ref.read(authNotifierProvider.notifier).refreshUserData();
+      
+      // Verificar se a atualização funcionou
+      await Future.delayed(const Duration(milliseconds: 1000));
+      final userAtualizado = await supabaseService.getCurrentUser();
+      print('DEBUG ACEITAR: userAtualizado.partnerId = ${userAtualizado?.partnerId}');
+      
+      // Verificar diretamente no banco novamente
+      final userDiretoFinal = await supabaseService.client
+          .from('users')
+          .select()
+          .eq('id', toUserId)
+          .single();
+      print('DEBUG ACEITAR: userDiretoFinal.partner_id = ${userDiretoFinal['partner_id']}');
+      print('DEBUG ACEITAR: userDiretoFinal completo = $userDiretoFinal');
       
     } catch (e) {
       print('Erro ao aceitar desafio: $e');
@@ -1347,42 +1587,87 @@ class PerfilIntellimenPage extends ConsumerWidget {
                             ),
                           ),
                           const SizedBox(height: 12),
-                          if (imagensSelecionadas.isNotEmpty)
-                            Wrap(
-                              spacing: 8,
-                              children: List.generate(imagensSelecionadas.length, (i) => Stack(
-                                alignment: Alignment.topRight,
-                                children: [
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Image.file(
-                                      File(imagensSelecionadas[i].path),
-                                      height: 80,
-                                      width: 80,
-                                      fit: BoxFit.cover,
-                                    ),
-                                  ),
-                                  Positioned(
-                                    top: 0,
-                                    right: 0,
-                                    child: GestureDetector(
+                                                  if (imagensSelecionadas.isNotEmpty)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Imagens selecionadas:',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                children: List.generate(imagensSelecionadas.length, (i) => Stack(
+                                  alignment: Alignment.topRight,
+                                  children: [
+                                    GestureDetector(
                                       onTap: () {
-                                        setState(() {
-                                          imagensSelecionadas.removeAt(i);
-                                        });
+                                        showDialog(
+                                          context: context,
+                                          builder: (context) => Dialog(
+                                            child: Stack(
+                                              children: [
+                                                Image.file(
+                                                  File(imagensSelecionadas[i].path),
+                                                  fit: BoxFit.contain,
+                                                ),
+                                                Positioned(
+                                                  top: 8,
+                                                  right: 8,
+                                                  child: GestureDetector(
+                                                    onTap: () => Navigator.of(context).pop(),
+                                                    child: Container(
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.black.withOpacity(0.7),
+                                                        borderRadius: BorderRadius.circular(20),
+                                                      ),
+                                                      child: const Icon(Icons.close, color: Colors.white, size: 24),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
                                       },
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          color: Colors.red,
-                                          borderRadius: BorderRadius.circular(12),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Image.file(
+                                          File(imagensSelecionadas[i].path),
+                                          height: 80,
+                                          width: 80,
+                                          fit: BoxFit.cover,
                                         ),
-                                        child: const Icon(Icons.close, color: Colors.white, size: 18),
                                       ),
                                     ),
-                                  ),
-                                ],
-                              )),
-                            ),
+                                    Positioned(
+                                      top: 0,
+                                      right: 0,
+                                      child: GestureDetector(
+                                        onTap: () {
+                                          setState(() {
+                                            imagensSelecionadas.removeAt(i);
+                                          });
+                                        },
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            color: Colors.red,
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: const Icon(Icons.close, color: Colors.white, size: 18),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                )),
+                              ),
+                            ],
+                          ),
                           if (imagensSelecionadas.length < 3)
                             Padding(
                               padding: const EdgeInsets.only(top: 12.0),
@@ -1509,7 +1794,48 @@ class PerfilIntellimenPage extends ConsumerWidget {
                                   }
                                   // Salvar no banco
                                   final currentUser = ref.read(currentUserDataProvider).value;
-                                  if (currentUser == null || currentUser.partnerId == null) {
+                                  final supabaseService = ref.read(supabaseServiceProvider);
+                                  print('DEBUG MODAL: currentUser = ${currentUser?.id}');
+                                  print('DEBUG MODAL: currentUser.partnerId = ${currentUser?.partnerId}');
+                                  
+                                  // Buscar dados atualizados do usuário se necessário
+                                  UserModel? userToUse = currentUser;
+                                  if (currentUser?.partnerId == null) {
+                                    print('DEBUG MODAL: Tentando buscar dados atualizados do usuário...');
+                                    
+                                    // Primeiro, forçar refresh do provider
+                                    try {
+                                      await ref.read(authNotifierProvider.notifier).refreshUserData();
+                                      await Future.delayed(const Duration(milliseconds: 500));
+                                    } catch (e) {
+                                      print('DEBUG MODAL: Erro ao fazer refresh: $e');
+                                    }
+                                    
+                                    try {
+                                      final updatedUser = await supabaseService.getCurrentUser();
+                                      if (updatedUser?.partnerId != null) {
+                                        print('DEBUG MODAL: Dados atualizados encontrados! partnerId = ${updatedUser?.partnerId}');
+                                        userToUse = updatedUser;
+                                      } else {
+                                        print('DEBUG MODAL: Usuário ainda não tem parceiro!');
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Você ainda não tem um parceiro para fazer desafios!')),
+                                        );
+                                        setState(() => isUploading = false);
+                                        return;
+                                      }
+                                    } catch (e) {
+                                      print('DEBUG MODAL: Erro ao buscar dados atualizados: $e');
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Erro ao buscar dados do usuário!')),
+                                      );
+                                      setState(() => isUploading = false);
+                                      return;
+                                    }
+                                  }
+                                  
+                                  if (userToUse == null || userToUse.partnerId == null) {
+                                    print('DEBUG MODAL: Usuário ou parceiro não encontrado!');
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(content: Text('Usuário/parceiro não encontrado!')),
                                     );
@@ -1523,15 +1849,14 @@ class PerfilIntellimenPage extends ConsumerWidget {
                                     setState(() => isUploading = false);
                                     return;
                                   }
-                                  final supabaseService = ref.read(supabaseServiceProvider);
                                   
                                   // Verificar se já existe um registro para este desafio
                                   try {
                                     final existingRecord = await supabaseService.client
                                         .from('user_challenges')
                                         .select()
-                                        .eq('user_id', currentUser.id)
-                                        .eq('partner_id', currentUser.partnerId!)
+                                        .eq('user_id', userToUse.id)
+                                        .eq('partner_id', userToUse.partnerId!)
                                         .eq('challenge_id', desafioSelecionadoId!)
                                         .maybeSingle();
                                     
@@ -1553,8 +1878,8 @@ class PerfilIntellimenPage extends ConsumerWidget {
                                       // Criar novo registro
                                       print('Criando novo registro...');
                                       await supabaseService.client.from('user_challenges').insert({
-                                        'user_id': currentUser.id,
-                                        'partner_id': currentUser.partnerId!,
+                                        'user_id': userToUse.id,
+                                        'partner_id': userToUse.partnerId!,
                                         'challenge_id': desafioSelecionadoId!,
                                         'notes': descricao,
                                         'image_url': imageUrls.join(','),
@@ -1609,6 +1934,24 @@ class PerfilIntellimenPage extends ConsumerWidget {
       },
     );
   }
+  
+  // Função para buscar dados atualizados e verificar desafios
+  Future<List<UserChallengeModel>> _buscarDadosAtualizadosEVerificarDesafios(String userId, SupabaseService supabaseService) async {
+    try {
+      // Buscar dados atualizados do usuário
+      final userAtualizado = await supabaseService.getUser(userId);
+      
+      if (userAtualizado?.partnerId != null) {
+        // Buscar desafios da dupla
+        final desafios = await supabaseService.getDesafiosDaDupla(userId, userAtualizado!.partnerId!);
+        return desafios;
+      } else {
+        return <UserChallengeModel>[];
+      }
+    } catch (e) {
+      return <UserChallengeModel>[];
+    }
+  }
 }
 
 class _DesafiosCarrosselWidget extends StatefulWidget {
@@ -1633,7 +1976,6 @@ class _DesafiosCarrosselWidgetState extends State<_DesafiosCarrosselWidget> {
 
   @override
   Widget build(BuildContext context) {
-    print('_DesafiosCarrosselWidget build - ${widget.desafios.length} desafios');
     return Column(
       children: [
         SizedBox(
@@ -1648,7 +1990,6 @@ class _DesafiosCarrosselWidgetState extends State<_DesafiosCarrosselWidget> {
             },
             itemBuilder: (context, index) {
               final desafio = widget.desafios[index];
-              print('Construindo card para desafio $index: ${desafio.id}');
               return FutureBuilder(
                 future: Future.wait([
                   widget.supabaseService.getUser(desafio.userId),
@@ -1783,7 +2124,16 @@ class _DesafiosCarrosselWidgetState extends State<_DesafiosCarrosselWidget> {
                                   const SizedBox(height: 16),
                                   ElevatedButton(
                                     onPressed: () {
-                                      showEditarDesafioModal(context, widget.supabaseService, desafio, user1, user2);
+                                      showEditarDesafioModal(
+                                        context, 
+                                        widget.supabaseService, 
+                                        desafio, 
+                                        user1, 
+                                        user2,
+                                        onUpdate: () {
+                                          setState(() {});
+                                        },
+                                      );
                                     },
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: const Color(0xFF000256),
@@ -1891,12 +2241,40 @@ class _DesafiosCarrosselWidgetState extends State<_DesafiosCarrosselWidget> {
   }
 }
 
-void showEditarDesafioModal(BuildContext context, SupabaseService supabaseService, UserChallengeModel desafio, UserModel user1, UserModel user2) async {
+void showEditarDesafioModal(BuildContext context, SupabaseService supabaseService, UserChallengeModel desafio, UserModel user1, UserModel user2, {VoidCallback? onUpdate}) async {
   // Usar o desafio diretamente para edição
   final userChallenge = desafio;
+  
+  // Buscar usuário logado para validação
+  final currentUser = await supabaseService.getCurrentUser();
+  if (currentUser == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Erro: Usuário não autenticado')),
+    );
+    return;
+  }
+  
+  // Verificar se o usuário logado é o dono do desafio
+  if (currentUser.id != userChallenge.userId) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Acesso Negado'),
+        content: Text('Você só pode editar desafios que você criou. Este desafio foi criado por ${user1.name}.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Entendi'),
+          ),
+        ],
+      ),
+    );
+    return;
+  }
 
   final TextEditingController descricaoController = TextEditingController(text: userChallenge.notes ?? '');
   List<XFile> imagensSelecionadas = [];
+  List<String> imagensExistentes = userChallenge.imageUrl?.split(',').where((url) => url.isNotEmpty).toList() ?? [];
   bool isUploading = false;
 
   showDialog(
@@ -1909,15 +2287,29 @@ void showEditarDesafioModal(BuildContext context, SupabaseService supabaseServic
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(24),
             ),
-            title: const Text(
-              'EDITAR DESAFIO',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF000256),
-                letterSpacing: 1.2,
-              ),
+            title: Column(
+              children: [
+                const Text(
+                  'EDITAR DESAFIO',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF000256),
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Editando desafio de ${user1.name}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
             ),
             content: SingleChildScrollView(
               child: Column(
@@ -1953,20 +2345,152 @@ void showEditarDesafioModal(BuildContext context, SupabaseService supabaseServic
                           ),
                         ),
                         const SizedBox(height: 12),
-                        // TODO: Implementar visualização de imagens quando o campo image_url for adicionado ao modelo
+                        // Visualizar imagens existentes
+                        if (imagensExistentes.isNotEmpty)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Imagens existentes:',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                children: List.generate(imagensExistentes.length, (i) => Stack(
+                                  alignment: Alignment.topRight,
+                                  children: [
+                                    GestureDetector(
+                                      onTap: () {
+                                        showDialog(
+                                          context: context,
+                                          builder: (context) => Dialog(
+                                            child: Stack(
+                                              children: [
+                                                Image.network(
+                                                  imagensExistentes[i],
+                                                  fit: BoxFit.contain,
+                                                  errorBuilder: (context, error, stackTrace) {
+                                                    return Container(
+                                                      color: Colors.grey[300],
+                                                      child: const Center(
+                                                        child: Icon(Icons.broken_image, color: Colors.grey, size: 60),
+                                                      ),
+                                                    );
+                                                  },
+                                                ),
+                                                Positioned(
+                                                  top: 8,
+                                                  right: 8,
+                                                  child: GestureDetector(
+                                                    onTap: () => Navigator.of(context).pop(),
+                                                    child: Container(
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.black.withOpacity(0.7),
+                                                        borderRadius: BorderRadius.circular(20),
+                                                      ),
+                                                      child: const Icon(Icons.close, color: Colors.white, size: 24),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Image.network(
+                                          imagensExistentes[i],
+                                          height: 80,
+                                          width: 80,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (context, error, stackTrace) {
+                                            return Container(
+                                              height: 80,
+                                              width: 80,
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey[300],
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: const Icon(Icons.broken_image, color: Colors.grey),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      top: 0,
+                                      right: 0,
+                                      child: GestureDetector(
+                                        onTap: () {
+                                          setState(() {
+                                            imagensExistentes.removeAt(i);
+                                          });
+                                        },
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            color: Colors.red,
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: const Icon(Icons.close, color: Colors.white, size: 18),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                )),
+                              ),
+                              const SizedBox(height: 16),
+                            ],
+                          ),
                         if (imagensSelecionadas.isNotEmpty)
                           Wrap(
                             spacing: 8,
                             children: List.generate(imagensSelecionadas.length, (i) => Stack(
                               alignment: Alignment.topRight,
                               children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Image.file(
-                                    File(imagensSelecionadas[i].path),
-                                    height: 80,
-                                    width: 80,
-                                    fit: BoxFit.cover,
+                                GestureDetector(
+                                  onTap: () {
+                                    showDialog(
+                                      context: context,
+                                      builder: (context) => Dialog(
+                                        child: Stack(
+                                          children: [
+                                            Image.file(
+                                              File(imagensSelecionadas[i].path),
+                                              fit: BoxFit.contain,
+                                            ),
+                                            Positioned(
+                                              top: 8,
+                                              right: 8,
+                                              child: GestureDetector(
+                                                onTap: () => Navigator.of(context).pop(),
+                                                child: Container(
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.black.withOpacity(0.7),
+                                                    borderRadius: BorderRadius.circular(20),
+                                                  ),
+                                                  child: const Icon(Icons.close, color: Colors.white, size: 24),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.file(
+                                      File(imagensSelecionadas[i].path),
+                                      height: 80,
+                                      width: 80,
+                                      fit: BoxFit.cover,
+                                    ),
                                   ),
                                 ),
                                 Positioned(
@@ -2089,7 +2613,8 @@ void showEditarDesafioModal(BuildContext context, SupabaseService supabaseServic
                                 setState(() => isUploading = true);
                                 List<String> imageUrls = [];
                                 
-                                // TODO: Implementar manutenção de imagens existentes quando o campo image_url for adicionado ao modelo
+                                // Manter imagens existentes e adicionar novas
+                                List<String> todasImagens = List.from(imagensExistentes);
                                 
                                 try {
                                   if (imagensSelecionadas.isNotEmpty) {
@@ -2101,7 +2626,7 @@ void showEditarDesafioModal(BuildContext context, SupabaseService supabaseServic
                                         bucketName: 'desafio-images',
                                         fileName: '${DateTime.now().millisecondsSinceEpoch}_$fileName',
                                       );
-                                      if (url != null) imageUrls.add(url);
+                                      if (url != null) todasImagens.add(url);
                                     }
                                   }
                                 } catch (e, st) {
@@ -2118,7 +2643,7 @@ void showEditarDesafioModal(BuildContext context, SupabaseService supabaseServic
                                 await supabaseService.client.from('user_challenges')
                                   .update({
                                     'notes': descricao,
-                                    'image_url': imageUrls.join(','),
+                                    'image_url': todasImagens.join(','),
                                   })
                                   .eq('id', userChallenge.id);
                                 
@@ -2127,7 +2652,21 @@ void showEditarDesafioModal(BuildContext context, SupabaseService supabaseServic
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(content: Text('Desafio atualizado com sucesso!')),
                                 );
-                                // TODO: Implementar refresh dos dados quando necessário
+                                
+                                // Forçar refresh dos dados
+                                try {
+                                  // Aguardar um pouco para garantir que os dados foram atualizados
+                                  await Future.delayed(const Duration(milliseconds: 500));
+                                  // Forçar rebuild da tela
+                                  if (context.mounted) {
+                                    // Aguardar mais um pouco para garantir que os dados foram atualizados
+                                    await Future.delayed(const Duration(milliseconds: 300));
+                                    // Chamar callback para atualizar a tela principal
+                                    onUpdate?.call();
+                                  }
+                                } catch (e) {
+                                  print('Erro ao atualizar dados: $e');
+                                }
                               },
                         child: isUploading
                             ? const SizedBox(
