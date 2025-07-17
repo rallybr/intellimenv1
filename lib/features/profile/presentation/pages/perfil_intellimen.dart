@@ -4,6 +4,7 @@ import 'package:intellimen/features/welcome/presentation/pages/welcome_home_page
 import 'package:intellimen/core/constants/welcome_constants.dart';
 import 'package:intellimen/features/profile/presentation/pages/perfil_academy.dart';
 import 'package:intellimen/features/profile/presentation/pages/perfil_campus.dart';
+import 'package:intellimen/features/dashboard/presentation/pages/dashboard_page.dart';
 import 'package:intellimen/core/services/supabase_service.dart';
 import 'package:intellimen/shared/providers/auth_provider.dart';
 import 'package:intellimen/shared/models/user_model.dart';
@@ -406,6 +407,16 @@ class PerfilIntellimenPage extends ConsumerWidget {
                               position: RelativeRect.fromLTRB(1000, MediaQuery.of(context).padding.top + 60, 16, 0),
                               items: [
                                 const PopupMenuItem(
+                                  value: 'Dashboard',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.dashboard, color: Color(0xFF000256)),
+                                      SizedBox(width: 8),
+                                      Text('Dashboard'),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuItem(
                                   value: 'Editar',
                                   child: Text('Editar'),
                                 ),
@@ -432,7 +443,14 @@ class PerfilIntellimenPage extends ConsumerWidget {
                               ),
                             );
                             if (selected == null) return;
-                            if (selected == 'Editar') {
+                            if (selected == 'Dashboard') {
+                              Navigator.of(context).pushAndRemoveUntil(
+                                MaterialPageRoute(
+                                  builder: (context) => const DashboardPage(),
+                                ),
+                                (route) => false,
+                              );
+                            } else if (selected == 'Editar') {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('Editar reflexão (em breve)')),
                               );

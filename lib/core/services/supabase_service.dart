@@ -4,6 +4,9 @@ import 'dart:io';
 import '../../shared/models/user_model.dart';
 import '../../shared/models/challenge_model.dart';
 import '../../shared/models/quiz_model.dart';
+import '../../shared/models/quiz_question_model.dart';
+import '../../shared/models/user_quiz_model.dart';
+import '../../shared/models/quiz_category_model.dart';
 import '../config/supabase_config.dart';
 import 'package:intellimen/shared/models/user_challenge_model.dart';
 
@@ -199,6 +202,213 @@ class SupabaseService {
         .eq('id', userChallenge.id);
   }
 
+  // =====================================================
+  // QUIZZES
+  // =====================================================
+
+  Future<List<QuizModel>> getQuizzes({String? category, String? type}) async {
+    try {
+      var query = _client
+          .from('quizzes')
+          .select()
+          .eq('is_active', true);
+      
+      if (category != null) {
+        query = query.eq('category', category);
+      }
+      
+      if (type != null) {
+        query = query.eq('type', type);
+      }
+      
+      final response = await query.order('created_at', ascending: false);
+      return response.map((json) => QuizModel.fromJson(json)).toList();
+    } catch (e) {
+      developer.log('Erro ao buscar quizzes: $e');
+      return [];
+    }
+  }
+
+  Future<QuizModel?> getQuiz(String quizId) async {
+    try {
+      final response = await _client
+          .from('quizzes')
+          .select()
+          .eq('id', quizId)
+          .single();
+      
+      return QuizModel.fromJson(response);
+    } catch (e) {
+      developer.log('Erro ao buscar quiz: $e');
+      return null;
+    }
+  }
+
+  Future<void> createQuiz(QuizModel quiz) async {
+    await _client.from('quizzes').insert(quiz.toJson());
+  }
+
+  Future<void> updateQuiz(QuizModel quiz) async {
+    await _client
+        .from('quizzes')
+        .update(quiz.toJson())
+        .eq('id', quiz.id);
+  }
+
+  Future<void> deleteQuiz(String quizId) async {
+    await _client
+        .from('quizzes')
+        .delete()
+        .eq('id', quizId);
+  }
+
+  // =====================================================
+  // QUESTÕES DE QUIZ
+  // =====================================================
+
+  Future<List<QuizQuestionModel>> getQuizQuestions(String quizId) async {
+    try {
+      final response = await _client
+          .from('quiz_questions')
+          .select()
+          .eq('quiz_id', quizId)
+          .order('created_at');
+      
+      return response.map((json) => QuizQuestionModel.fromJson(json)).toList();
+    } catch (e) {
+      developer.log('Erro ao buscar questões do quiz: $e');
+      return [];
+    }
+  }
+
+  Future<QuizQuestionModel?> getQuizQuestion(String questionId) async {
+    try {
+      final response = await _client
+          .from('quiz_questions')
+          .select()
+          .eq('id', questionId)
+          .single();
+      
+      return QuizQuestionModel.fromJson(response);
+    } catch (e) {
+      developer.log('Erro ao buscar questão: $e');
+      return null;
+    }
+  }
+
+  Future<void> createQuizQuestion(QuizQuestionModel question) async {
+    await _client.from('quiz_questions').insert(question.toJson());
+  }
+
+  Future<void> updateQuizQuestion(QuizQuestionModel question) async {
+    await _client
+        .from('quiz_questions')
+        .update(question.toJson())
+        .eq('id', question.id);
+  }
+
+  Future<void> deleteQuizQuestion(String questionId) async {
+    await _client
+        .from('quiz_questions')
+        .delete()
+        .eq('id', questionId);
+  }
+
+  // =====================================================
+  // EXECUÇÕES DE QUIZ
+  // =====================================================
+
+  Future<List<UserQuizModel>> getUserQuizzes(String userId) async {
+    try {
+      final response = await _client
+          .from('user_quizzes')
+          .select('*, quizzes(*)')
+          .eq('user_id', userId)
+          .order('created_at', ascending: false);
+      
+      return response.map((json) => UserQuizModel.fromJson(json)).toList();
+    } catch (e) {
+      developer.log('Erro ao buscar execuções de quiz do usuário: $e');
+      return [];
+    }
+  }
+
+  Future<UserQuizModel?> getUserQuiz(String userQuizId) async {
+    try {
+      final response = await _client
+          .from('user_quizzes')
+          .select('*, quizzes(*)')
+          .eq('id', userQuizId)
+          .single();
+      
+      return UserQuizModel.fromJson(response);
+    } catch (e) {
+      developer.log('Erro ao buscar execução de quiz: $e');
+      return null;
+    }
+  }
+
+  Future<UserQuizModel?> getCurrentUserQuiz(String quizId) async {
+    final user = currentUser;
+    if (user == null) return null;
+    
+    try {
+      final response = await _client
+          .from('user_quizzes')
+          .select('*, quizzes(*)')
+          .eq('user_id', user.id)
+          .eq('quiz_id', quizId)
+          .eq('status', 'in_progress')
+          .maybeSingle();
+      
+      if (response == null) return null;
+      return UserQuizModel.fromJson(response);
+    } catch (e) {
+      developer.log('Erro ao buscar execução atual do quiz: $e');
+      return null;
+    }
+  }
+
+  Future<void> createUserQuiz(UserQuizModel userQuiz) async {
+    await _client.from('user_quizzes').insert(userQuiz.toJson());
+  }
+
+  Future<void> updateUserQuiz(UserQuizModel userQuiz) async {
+    await _client
+        .from('user_quizzes')
+        .update(userQuiz.toJson())
+        .eq('id', userQuiz.id);
+  }
+
+  Future<void> completeUserQuiz(String userQuizId, int score, Map<String, dynamic> answers) async {
+    await _client
+        .from('user_quizzes')
+        .update({
+          'score': score,
+          'answers': answers,
+          'completed_at': DateTime.now().toIso8601String(),
+          'status': 'completed',
+        })
+        .eq('id', userQuizId);
+  }
+
+  Future<List<UserQuizModel>> getPartnerQuizzes(String userId, String partnerId) async {
+    try {
+      final response = await _client
+          .from('user_quizzes')
+          .select('*, quizzes(*)')
+          .or('user_id.eq.$userId,partner_id.eq.$userId')
+          .or('user_id.eq.$partnerId,partner_id.eq.$partnerId')
+          .eq('status', 'completed')
+          .order('completed_at', ascending: false);
+      
+      return response.map((json) => UserQuizModel.fromJson(json)).toList();
+    } catch (e) {
+      developer.log('Erro ao buscar quizzes em parceria: $e');
+      return [];
+    }
+  }
+
   Future<List<UserChallengeModel>> getDesafiosDaDupla(String userId, String partnerId) async {
     try {
       print('Buscando desafios da dupla: userId=$userId, partnerId=$partnerId');
@@ -255,70 +465,6 @@ class SupabaseService {
       developer.log('Erro ao buscar user_challenge: $e');
       return null;
     }
-  }
-
-  // =====================================================
-  // QUIZZES
-  // =====================================================
-
-  Future<List<QuizModel>> getQuizzes({String? type}) async {
-    try {
-      var query = _client
-          .from('quizzes')
-          .select()
-          .eq('is_active', true);
-      
-      if (type != null) {
-        query = query.eq('type', type);
-      }
-      
-      final response = await query.order('created_at');
-      return response.map((json) => QuizModel.fromJson(json)).toList();
-    } catch (e) {
-      developer.log('Erro ao buscar quizzes: $e');
-      return [];
-    }
-  }
-
-  Future<List<QuizQuestionModel>> getQuizQuestions(String quizId) async {
-    try {
-      final response = await _client
-          .from('quiz_questions')
-          .select()
-          .eq('quiz_id', quizId)
-          .order('created_at');
-      
-      return response.map((json) => QuizQuestionModel.fromJson(json)).toList();
-    } catch (e) {
-      developer.log('Erro ao buscar perguntas do quiz: $e');
-      return [];
-    }
-  }
-
-  Future<List<UserQuizModel>> getUserQuizzes(String userId) async {
-    try {
-      final response = await _client
-          .from('user_quizzes')
-          .select()
-          .eq('user_id', userId)
-          .order('created_at', ascending: false);
-      
-      return response.map((json) => UserQuizModel.fromJson(json)).toList();
-    } catch (e) {
-      developer.log('Erro ao buscar quizzes do usuário: $e');
-      return [];
-    }
-  }
-
-  Future<void> createUserQuiz(UserQuizModel userQuiz) async {
-    await _client.from('user_quizzes').insert(userQuiz.toJson());
-  }
-
-  Future<void> updateUserQuiz(UserQuizModel userQuiz) async {
-    await _client
-        .from('user_quizzes')
-        .update(userQuiz.toJson())
-        .eq('id', userQuiz.id);
   }
 
   // =====================================================
@@ -507,6 +653,72 @@ class SupabaseService {
       });
     } catch (e) {
       developer.log('Erro ao enviar convite de desafio: $e');
+      rethrow;
+    }
+  }
+
+  // =====================================================
+  // CATEGORIAS DE QUIZ
+  // =====================================================
+
+  Future<List<QuizCategoryModel>> getQuizCategories() async {
+    try {
+      final response = await _client
+          .from('quiz_categories')
+          .select()
+          .order('name');
+      
+      return response.map((json) => QuizCategoryModel.fromJson(json)).toList();
+    } catch (e) {
+      developer.log('Erro ao buscar categorias de quiz: $e');
+      return [];
+    }
+  }
+
+  Future<QuizCategoryModel?> getQuizCategory(String categoryId) async {
+    try {
+      final response = await _client
+          .from('quiz_categories')
+          .select()
+          .eq('id', categoryId)
+          .single();
+      
+      return QuizCategoryModel.fromJson(response);
+    } catch (e) {
+      developer.log('Erro ao buscar categoria de quiz: $e');
+      return null;
+    }
+  }
+
+  Future<void> createQuizCategory(QuizCategoryModel category) async {
+    try {
+      await _client.from('quiz_categories').insert(category.toJson());
+    } catch (e) {
+      developer.log('Erro ao criar categoria de quiz: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> updateQuizCategory(QuizCategoryModel category) async {
+    try {
+      await _client
+          .from('quiz_categories')
+          .update(category.toJson())
+          .eq('id', category.id);
+    } catch (e) {
+      developer.log('Erro ao atualizar categoria de quiz: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> deleteQuizCategory(String categoryId) async {
+    try {
+      await _client
+          .from('quiz_categories')
+          .delete()
+          .eq('id', categoryId);
+    } catch (e) {
+      developer.log('Erro ao deletar categoria de quiz: $e');
       rethrow;
     }
   }
