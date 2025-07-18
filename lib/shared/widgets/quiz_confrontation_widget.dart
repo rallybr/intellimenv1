@@ -1,26 +1,26 @@
 import 'package:flutter/material.dart';
-import '../../core/services/supabase_service.dart';
-import '../models/user_model.dart';
-import '../models/quiz_model.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/constants/app_colors.dart';
+import '../models/user_quiz_model.dart';
+import '../providers/data_provider.dart';
 
-class QuizConfrontationWidget extends StatefulWidget {
+class QuizConfrontationWidget extends ConsumerStatefulWidget {
   final String userId;
   final VoidCallback? onUpdate;
 
   const QuizConfrontationWidget({
-    Key? key,
+    super.key,
     required this.userId,
     this.onUpdate,
-  }) : super(key: key);
+  });
 
   @override
-  State<QuizConfrontationWidget> createState() => _QuizConfrontationWidgetState();
+  ConsumerState<QuizConfrontationWidget> createState() => _QuizConfrontationWidgetState();
 }
 
-class _QuizConfrontationWidgetState extends State<QuizConfrontationWidget> {
+class _QuizConfrontationWidgetState extends ConsumerState<QuizConfrontationWidget> {
   final PageController _pageController = PageController(viewportFraction: 0.92);
   int _currentPage = 0;
-  final SupabaseService _supabaseService = SupabaseService();
 
   @override
   void dispose() {
@@ -30,16 +30,13 @@ class _QuizConfrontationWidgetState extends State<QuizConfrontationWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<UserQuizModel>>(
-      stream: Stream.periodic(const Duration(seconds: 2), (_) async {
-        return await _getConfrontos();
-      }).asyncMap((future) => future),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final confrontos = snapshot.data!;
+    final confrontosAsync = ref.watch(userQuizzesStreamProvider);
+    
+    return confrontosAsync.when(
+      data: (allQuizzes) {
+        // Filtrar apenas confrontos (que têm partnerId)
+        final confrontos = allQuizzes.where((quiz) => quiz.isPartner).toList();
+        
         if (confrontos.isEmpty) {
           return _buildEmptyState();
         }
@@ -58,7 +55,7 @@ class _QuizConfrontationWidgetState extends State<QuizConfrontationWidget> {
                 },
                 itemBuilder: (context, index) {
                   final confronto = confrontos[index];
-                  return _buildQuizCard(confronto);
+                  return _buildQuizCard(context, ref, confronto);
                 },
               ),
             ),
@@ -67,67 +64,11 @@ class _QuizConfrontationWidgetState extends State<QuizConfrontationWidget> {
           ],
         );
       },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, stack) => Center(
+        child: Text('Erro: $error'),
+      ),
     );
-  }
-
-  Future<List<UserQuizModel>> _getConfrontos() async {
-    try {
-      // Buscar todos os quizzes do usuário (como jogador principal)
-      final userQuizzes = await _supabaseService.getUserQuizzes(widget.userId);
-      
-      // Buscar todos os quizzes onde o usuário é parceiro
-      final partnerQuizzes = await _supabaseService.client
-          .from('user_quizzes')
-          .select()
-          .eq('partner_id', widget.userId);
-      
-      // Buscar também quizzes completados que podem ser confrontos
-      final completedQuizzes = await _supabaseService.client
-          .from('user_quizzes')
-          .select()
-          .eq('user_id', widget.userId)
-          .eq('status', 'completed')
-          .not('partner_id', 'is', null);
-      
-      // Combinar e filtrar apenas confrontos (que têm partnerId)
-      final allQuizzes = [
-        ...userQuizzes,
-        ...partnerQuizzes.map((json) => UserQuizModel.fromJson(json)),
-        ...completedQuizzes.map((json) => UserQuizModel.fromJson(json)),
-      ];
-      
-      // Filtrar apenas confrontos únicos (remover duplicatas)
-      final confrontos = <UserQuizModel>[];
-      final seenIds = <String>{};
-      
-      for (final quiz in allQuizzes) {
-        if (quiz.partnerId != null && !seenIds.contains(quiz.id)) {
-          confrontos.add(quiz);
-          seenIds.add(quiz.id ?? '');
-        }
-      }
-      
-      if (confrontos.isEmpty) {
-        final completedConfrontos = await _supabaseService.client
-            .from('user_quizzes')
-            .select()
-            .or('user_id.eq.${widget.userId},partner_id.eq.${widget.userId}')
-            .eq('status', 'completed')
-            .not('partner_id', 'is', null);
-        
-        for (final json in completedConfrontos) {
-          final quiz = UserQuizModel.fromJson(json);
-          if (!seenIds.contains(quiz.id)) {
-            confrontos.add(quiz);
-            seenIds.add(quiz.id ?? '');
-          }
-        }
-      }
-      
-      return confrontos;
-    } catch (e) {
-      return [];
-    }
   }
 
   Widget _buildEmptyState() {
@@ -139,7 +80,7 @@ class _QuizConfrontationWidgetState extends State<QuizConfrontationWidget> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 25,
             offset: const Offset(0, 12),
             spreadRadius: 2,
@@ -173,109 +114,123 @@ class _QuizConfrontationWidgetState extends State<QuizConfrontationWidget> {
     );
   }
 
-  Widget _buildQuizCard(UserQuizModel confronto) {
-    return FutureBuilder(
-      future: Future.wait([
-        _supabaseService.getUser(confronto.userId),
-        _supabaseService.getUser(confronto.partnerId!),
-        _supabaseService.client
-            .from('user_quizzes')
-            .select()
-            .eq('user_id', confronto.partnerId!)
-            .eq('quiz_id', confronto.quizId)
-            .maybeSingle()
-            .then((result) => result),
-        _supabaseService.getQuizQuestions(confronto.quizId),
-        _supabaseService.getQuizzes(),
-      ]),
-      builder: (context, AsyncSnapshot<List<dynamic>> snap) {
-        if (!snap.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final user1 = snap.data![0] as UserModel?;
-        final user2 = snap.data![1] as UserModel?;
-        final partnerQuizRaw = snap.data![2];
-        final quizQuestions = snap.data![3] as List;
-        final quizzes = snap.data![4] as List<QuizModel>;
-        
-        final quiz = quizzes.firstWhere(
-          (q) => q.id == confronto.quizId,
-          orElse: () => QuizModel(
-            id: confronto.quizId,
-            title: 'Quiz',
-            description: '',
-            type: '',
-            category: '',
-            difficulty: 1,
-            createdAt: DateTime.now(),
-            isActive: true,
+  Widget _buildPageIndicators(int count) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(count, (index) {
+        return Container(
+          width: 8,
+          height: 8,
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: _currentPage == index ? AppColors.primary : Colors.grey[300],
           ),
         );
+      }),
+    );
+  }
+
+  Widget _buildQuizCard(BuildContext context, WidgetRef ref, UserQuizModel confronto) {
+    final pontuacaoAsync = ref.watch(pontuacaoQuizDuploStreamProvider(confronto.quizId));
+    
+    return pontuacaoAsync.when(
+      data: (pontuacao) {
+        // Buscar dados dos usuários
+        final user1Async = ref.watch(userByIdProvider(confronto.userId));
+        final user2Async = ref.watch(userByIdProvider(confronto.partnerId!));
+        final quizAsync = ref.watch(quizByIdProvider(confronto.quizId));
         
-        final partnerQuiz = partnerQuizRaw != null
-            ? UserQuizModel.fromJson(partnerQuizRaw)
-            : null;
-        
-        final pontos1 = confronto.score;
-        final total = confronto.totalQuestions > 0 ? confronto.totalQuestions : quizQuestions.length;
-        final pontos2 = partnerQuiz?.score ?? 0;
-        return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16),
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: const Color(0xFFEE0E0E0),
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.12),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              Text(
-                quiz.title,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 2,
-                  color: Color(0xFF232323),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildQuizProfile(
-                      nome: user1?.name ?? '-',
-                      url: user1?.photoUrl ?? '',
-                      pontos: pontos1,
-                      total: total,
-                    ),
-                  ),
-                  Container(
-                    width: 1,
-                    height: 80,
-                    color: Colors.grey[300],
-                    margin: const EdgeInsets.symmetric(horizontal: 8),
-                  ),
-                  Expanded(
-                    child: _buildQuizProfile(
-                      nome: user2?.name ?? '-',
-                      url: user2?.photoUrl ?? '',
-                      pontos: pontos2,
-                      total: total,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+        return user1Async.when(
+          data: (user1) {
+            return user2Async.when(
+              data: (user2) {
+                return quizAsync.when(
+                  data: (quiz) {
+                    // Buscar dados do parceiro na pontuação em tempo real
+                    final partnerData = pontuacao[confronto.partnerId!];
+                    final currentUserData = pontuacao[confronto.userId];
+                    
+                    final partnerScore = partnerData?['score'] ?? 0;
+                    final currentUserScore = currentUserData?['score'] ?? confronto.score;
+                    final totalQuestions = currentUserData?['totalQuestions'] ?? confronto.totalQuestions ?? 0;
+            
+                    final pontos1 = currentUserScore;
+                    final total = totalQuestions;
+                    final pontos2 = partnerScore;
+                    
+                    return Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 16),
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEE0E0E0),
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.12),
+                            blurRadius: 18,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            quiz?.title ?? 'Quiz Duplo',
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 2,
+                              color: Color(0xFF232323),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildQuizProfile(
+                                  nome: user1?.name ?? '-',
+                                  url: user1?.photoUrl ?? '',
+                                  pontos: pontos1,
+                                  total: total,
+                                ),
+                              ),
+                              Container(
+                                width: 1,
+                                height: 80,
+                                color: Colors.grey[300],
+                                margin: const EdgeInsets.symmetric(horizontal: 8),
+                              ),
+                              Expanded(
+                                child: _buildQuizProfile(
+                                  nome: user2?.name ?? '-',
+                                  url: user2?.photoUrl ?? '',
+                                  pontos: pontos2,
+                                  total: total,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                  loading: () => const Center(child: CircularProgressIndicator()),
+                  error: (error, stack) => Center(child: Text('Erro: $error')),
+                );
+              },
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, stack) => Center(child: Text('Erro: $error')),
+            );
+          },
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, stack) => Center(child: Text('Erro: $error')),
         );
       },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, stack) => Center(
+        child: Text('Erro: $error'),
+      ),
     );
   }
 
@@ -295,11 +250,12 @@ class _QuizConfrontationWidgetState extends State<QuizConfrontationWidget> {
             border: Border.all(color: const Color(0xFF00256d), width: 2),
           ),
           child: CircleAvatar(
-            backgroundImage: NetworkImage(url),
+            backgroundImage: url.isNotEmpty ? NetworkImage(url) : null,
             radius: 32,
             onBackgroundImageError: (exception, stackTrace) {
               // Handle error if image fails to load
             },
+            child: url.isEmpty ? Icon(Icons.person, size: 32, color: Colors.grey[600]) : null,
           ),
         ),
         const SizedBox(height: 8),
@@ -326,26 +282,6 @@ class _QuizConfrontationWidgetState extends State<QuizConfrontationWidget> {
           style: const TextStyle(fontSize: 14, color: Colors.black87),
         ),
       ],
-    );
-  }
-
-  Widget _buildPageIndicators(int totalItems) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(
-        totalItems > 10 ? 10 : totalItems,
-        (index) {
-          return Container(
-            margin: const EdgeInsets.symmetric(horizontal: 4),
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: index == _currentPage ? const Color(0xFF0256D) : Colors.grey[300],
-            ),
-          );
-        },
-      ),
     );
   }
 } 

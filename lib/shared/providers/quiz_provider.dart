@@ -24,11 +24,7 @@ final partnerQuizzesProvider = FutureProvider<List<QuizModel>>((ref) async {
   return quizzes.where((quiz) => quiz.isPartner).toList();
 });
 
-// Provider para buscar um quiz específico
-final quizByIdProvider = FutureProvider.family<QuizModel?, String>((ref, quizId) async {
-  final supabaseService = ref.watch(supabaseServiceProvider);
-  return await supabaseService.getQuiz(quizId);
-});
+
 
 // Provider para buscar perguntas de um quiz
 final quizQuestionsProvider = FutureProvider.family<List<QuizQuestionModel>, String>((ref, quizId) async {
@@ -104,7 +100,7 @@ class QuizNotifier extends StateNotifier<AsyncValue<void>> {
         status: 'in_progress',
         answers: {},
         createdAt: DateTime.now(),
-        quiz: null,
+
       );
       
       await _supabaseService.createUserQuiz(userQuiz);

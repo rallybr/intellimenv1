@@ -10,9 +10,15 @@ import 'package:intellimen/shared/providers/auth_provider.dart';
 import 'package:intellimen/shared/models/user_model.dart';
 import 'package:intellimen/shared/models/user_challenge_model.dart';
 import 'package:intellimen/shared/models/challenge_model.dart';
+import 'package:intellimen/shared/models/user_quiz_model.dart';
+import 'package:intellimen/shared/models/quiz_model.dart';
+import 'package:intellimen/shared/providers/data_provider.dart';
+import 'package:intellimen/features/quiz/presentation/pages/quiz_play_page.dart';
+import 'package:intellimen/features/quiz/presentation/pages/quiz_waiting_partner_page.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:path/path.dart' as path;
+import 'dart:developer' as developer;
 
 // Modelo simples para desafio
 class Desafio {
@@ -97,6 +103,7 @@ class PerfilIntellimenPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final userAsync = ref.watch(currentUserDataProvider);
     final convitesPendentesAsync = ref.watch(convitesPendentesProvider);
+    final convitesQuizDuploAsync = ref.watch(convitesQuizDuploPendentesProvider);
 
         convitesPendentesAsync.whenData((convites) async {
       if (convites != null && convites.isNotEmpty) {
@@ -156,11 +163,8 @@ class PerfilIntellimenPage extends ConsumerWidget {
                     textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   onPressed: () async {
-                    print('DEBUG MODAL: Botão "Aceitar Desafio" pressionado');
                     try {
-                      print('DEBUG MODAL: Chamando _aceitarDesafio...');
                       await _aceitarDesafio(context, convite, ref);
-                      print('DEBUG MODAL: _aceitarDesafio concluído com sucesso');
                       if (context.mounted) {
                         Navigator.of(context).pop();
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -168,7 +172,6 @@ class PerfilIntellimenPage extends ConsumerWidget {
                         );
                       }
                     } catch (e) {
-                      print('DEBUG MODAL: Erro em _aceitarDesafio: $e');
                       if (context.mounted) {
                         Navigator.of(context).pop();
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -208,6 +211,13 @@ class PerfilIntellimenPage extends ConsumerWidget {
             ),
           );
         });
+      }
+    });
+
+    // Verificar convites de Quiz Duplo pendentes
+    convitesQuizDuploAsync.whenData((convites) {
+      if (convites.isNotEmpty) {
+        _verificarConvitesQuizDuplo(context, ref);
       }
     });
 
@@ -377,7 +387,7 @@ class PerfilIntellimenPage extends ConsumerWidget {
                           ),
                         const SizedBox(height: 24),
                         // Mostrar carrossel apenas se for meu perfil ou se o usuário tiver parceiro
-                        if (isMeuPerfil || partnerId != null)
+                        if ((isMeuPerfil || partnerId != null) && desafiosDupla.isNotEmpty)
                           _buildDesafiosCarrosselReal(context, desafiosDupla, user, partnerId),
                         const SizedBox(height: 24),
                         _buildQuizCarrossel(context),
@@ -984,91 +994,437 @@ class PerfilIntellimenPage extends ConsumerWidget {
   }
 
   Widget _buildQuizCarrossel(BuildContext context) {
-    return SizedBox(
-      height: 320,
-      child: PageView.builder(
-        itemCount: quizzes.length,
-        controller: PageController(viewportFraction: 0.92),
-        itemBuilder: (context, index) {
-          final quiz = quizzes[index];
-          return _buildQuizCard(
-            context,
-            titulo: quiz.titulo,
-            nome1: quiz.nome1,
-            url1: quiz.url1,
-            pontos1: quiz.pontos1,
-            total: quiz.total,
-            nome2: quiz.nome2,
-            url2: quiz.url2,
-            pontos2: quiz.pontos2,
-          );
-        },
-      ),
+    return Consumer(
+      builder: (context, ref, child) {
+        final quizDuplosAsync = ref.watch(quizDuplosCompletadosProvider);
+        
+        return quizDuplosAsync.when(
+          data: (quizDuplos) {
+            return FutureBuilder<List<UserQuizModel>>(
+              future: _filtrarQuizDuplosValidos(quizDuplos, ref),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Container(
+                    height: 320,
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Color(0xFFEE0E0E0),
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.12),
+                          blurRadius: 18,
+                          offset: Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: const Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                }
+                
+                final quizDuplosValidos = snapshot.data ?? [];
+                
+                if (quizDuplosValidos.isEmpty) {
+                  return Container(
+                    height: 320,
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Color(0xFFEE0E0E0),
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.12),
+                          blurRadius: 18,
+                          offset: Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.quiz,
+                          size: 64,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Nenhum Quiz Duplo realizado ainda',
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.w500,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Convide alguém para um confronto!',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[500],
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return SizedBox(
+                  height: 320,
+                  child: PageView.builder(
+                    itemCount: quizDuplosValidos.length,
+                    controller: PageController(viewportFraction: 0.92),
+                    itemBuilder: (context, index) {
+                      final userQuiz = quizDuplosValidos[index];
+                      return _buildQuizDuploCard(context, userQuiz, ref);
+                    },
+                  ),
+                );
+              },
+            );
+          },
+          loading: () => Container(
+            height: 320,
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Color(0xFFEE0E0E0),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.12),
+                  blurRadius: 18,
+                  offset: Offset(0, 8),
+                ),
+              ],
+            ),
+            child: const Center(
+              child: CircularProgressIndicator(),
+            ),
+          ),
+          error: (error, stack) => Container(
+            height: 320,
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Color(0xFFEE0E0E0),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.12),
+                  blurRadius: 18,
+                  offset: Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.error,
+                  size: 64,
+                  color: Colors.red[400],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Erro ao carregar quizzes',
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: Colors.red[600],
+                    fontWeight: FontWeight.w500,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildQuizCard(
-    BuildContext context, {
-    required String titulo,
-    required String nome1,
-    required String url1,
-    required int pontos1,
-    required int total,
-    required String nome2,
-    required String url2,
-    required int pontos2,
-  }) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Color(0xFFEE0E0E0),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.12),
-            blurRadius: 18,
-            offset: Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Text(
-            titulo,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 2,
-              color: Color(0xFF232323),
+  Future<List<UserQuizModel>> _filtrarQuizDuplosValidos(List<UserQuizModel> quizDuplos, WidgetRef ref) async {
+    final quizDuplosValidos = <UserQuizModel>[];
+    
+    for (final userQuiz in quizDuplos) {
+      // Mostrar todos os quizzes duplos, independente de ter parceiro válido
+      // O card vai mostrar "Aguardando parceiro" se não tiver parceiro
+      quizDuplosValidos.add(userQuiz);
+    }
+    
+    return quizDuplosValidos;
+  }
+
+  Widget _buildQuizDuploCard(BuildContext context, UserQuizModel userQuiz, WidgetRef ref) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _getQuizDuploData(userQuiz, ref),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Color(0xFFEE0E0E0),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.12),
+                  blurRadius: 18,
+                  offset: Offset(0, 8),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(child: _buildQuizPerfil(
-                nome: nome1,
-                url: url1,
-                pontos: pontos1,
-                total: total,
-              )),
-              Container(
-                width: 1,
-                height: 80,
-                color: Colors.grey[300],
-                margin: const EdgeInsets.symmetric(horizontal: 8),
+            child: const Center(
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+
+        final data = snapshot.data!;
+        final quiz = data['quiz'] as Map<String, dynamic>;
+        final partner = data['partner'] as UserModel?;
+        final partnerQuiz = data['partnerQuiz'] as UserQuizModel?;
+
+        final userLogado = ref.watch(currentUserDataProvider).value;
+        
+        // Verificar se o parceiro é válido e diferente do usuário logado
+        final isMesmoUsuario = partner?.id == userLogado?.id;
+        final temParceiroValido = partner != null && !isMesmoUsuario;
+
+        return Stack(
+          children: [
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Color(0xFFEE0E0E0),
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.12),
+                    blurRadius: 18,
+                    offset: Offset(0, 8),
+                  ),
+                ],
               ),
-              Expanded(child: _buildQuizPerfil(
-                nome: nome2,
-                url: url2,
-                pontos: pontos2,
-                total: total,
-              )),
+              child: Column(
+                children: [
+                  Text(
+                    'QUIZ DUPLO',
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 2,
+                      color: Color(0xFF232323),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    quiz['title'] ?? 'Quiz',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF232323),
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(child: _buildQuizPerfil(
+                    nome: userLogado?.name ?? 'Você',
+                    url: userLogado?.photoUrl ?? 'https://randomuser.me/api/portraits/men/1.jpg',
+                    pontos: userQuiz.score,
+                    total: userQuiz.totalQuestions ?? 10,
+                    isWinner: partnerQuiz != null && userQuiz.score > (partnerQuiz?.score ?? 0),
+                  )),
+                  Container(
+                    width: 1,
+                    height: 80,
+                    color: Colors.grey[300],
+                    margin: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  Expanded(
+                    child: !temParceiroValido
+                      ? Column(
+                          children: [
+                            CircleAvatar(
+                              backgroundColor: Colors.grey[300],
+                              radius: 32,
+                              child: const Icon(Icons.person_outline, color: Colors.white, size: 32),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text('Aguardando parceiro', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black54)),
+                            const SizedBox(height: 8),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: LinearProgressIndicator(
+                                value: 0,
+                                backgroundColor: Colors.grey[200],
+                                color: Colors.blue,
+                                minHeight: 20,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text('0 pontos de 0 total', style: TextStyle(fontSize: 14, color: Colors.black54)),
+                          ],
+                        )
+                      : _buildQuizPerfil(
+                          nome: partner?.name ?? 'Parceiro',
+                          url: partner?.photoUrl ?? 'https://randomuser.me/api/portraits/men/2.jpg',
+                          pontos: partnerQuiz?.score ?? 0,
+                          total: partnerQuiz?.totalQuestions ?? userQuiz.totalQuestions ?? 10,
+                          isWinner: partnerQuiz != null && (partnerQuiz?.score ?? 0) > userQuiz.score,
+                        ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Mostrar quem está vencendo
+              if (partnerQuiz != null && temParceiroValido)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: userQuiz.score > partnerQuiz.score 
+                        ? Colors.green[100] 
+                        : userQuiz.score < partnerQuiz.score 
+                            ? Colors.red[100] 
+                            : Colors.blue[100],
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Text(
+                    userQuiz.score > partnerQuiz.score 
+                        ? '${userLogado?.name ?? 'Você'} está vencendo!'
+                        : userQuiz.score < partnerQuiz.score 
+                            ? '${partner?.name ?? 'Parceiro'} está vencendo!'
+                            : 'Empate!',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: userQuiz.score > partnerQuiz.score 
+                          ? Colors.green[800] 
+                          : userQuiz.score < partnerQuiz.score 
+                              ? Colors.red[800] 
+                              : Colors.blue[800],
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
             ],
           ),
-        ],
-      ),
+            ),
+            // Botão Play flutuante no canto superior direito
+            Positioned(
+              top: 8,
+              right: 24,
+              child: GestureDetector(
+                onTap: () {
+                  // Verificar se o quiz já foi completado
+                  if (userQuiz.status == 'completed') {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Este quiz já foi completado!'),
+                        backgroundColor: Colors.orange,
+                      ),
+                    );
+                    return;
+                  }
+
+                  // Verificar o status do quiz e navegar adequadamente
+                  if (userQuiz.status == 'waiting_partner') {
+                    // Navegar para a página de aguardando parceiro
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => QuizWaitingPartnerPage(userQuiz: userQuiz),
+                      ),
+                    );
+                  } else if (userQuiz.status == 'in_progress') {
+                    // Navegar para a tela de quiz
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => QuizPlayPage(userQuiz: userQuiz),
+                      ),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Quiz não está disponível para jogar'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF000256),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.play_arrow,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
+  }
+
+  Future<Map<String, dynamic>> _getQuizDuploData(UserQuizModel userQuiz, WidgetRef ref) async {
+    final supabaseService = ref.read(supabaseServiceProvider);
+    
+    // Buscar dados do quiz
+    final quiz = await supabaseService.getQuiz(userQuiz.quizId);
+    
+    // Buscar dados do parceiro - buscar todos os user_quizzes com o mesmo quizId
+    UserModel? partner;
+    UserQuizModel? partnerQuiz;
+    
+    try {
+      // Buscar todos os registros de user_quizzes para este quiz
+      final allUserQuizzes = await supabaseService.client
+          .from('user_quizzes')
+          .select('*')
+          .eq('quiz_id', userQuiz.quizId);
+      
+      // Encontrar o parceiro (registro onde userId != userQuiz.userId)
+      final partnerRecords = allUserQuizzes.where((record) => record['user_id'] != userQuiz.userId).toList();
+      
+      if (partnerRecords.isNotEmpty) {
+        final partnerRecord = partnerRecords.first;
+        
+        // Buscar dados do usuário parceiro
+        partner = await supabaseService.getUser(partnerRecord['user_id']);
+        
+        // Criar UserQuizModel do parceiro
+        partnerQuiz = UserQuizModel.fromJson(partnerRecord);
+      }
+    } catch (e) {
+      // Erro silencioso para não poluir os logs
+    }
+
+    return {
+      'quiz': quiz?.toJson() ?? {},
+      'partner': partner,
+      'partnerQuiz': partnerQuiz,
+    };
   }
 
   Widget _buildQuizPerfil({
@@ -1076,13 +1432,17 @@ class PerfilIntellimenPage extends ConsumerWidget {
     required String url,
     required int pontos,
     required int total,
+    bool isWinner = false,
   }) {
     return Column(
       children: [
         Container(
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFF000256), width: 2),
+            border: Border.all(
+              color: isWinner ? Colors.green : const Color(0xFF000256), 
+              width: isWinner ? 3 : 2,
+            ),
           ),
           child: CircleAvatar(
             backgroundImage: NetworkImage(url),
@@ -1093,7 +1453,11 @@ class PerfilIntellimenPage extends ConsumerWidget {
         const SizedBox(height: 8),
         Text(
           nome,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          style: TextStyle(
+            fontWeight: FontWeight.bold, 
+            fontSize: 16,
+            color: isWinner ? Colors.green[800] : Colors.black87,
+          ),
           textAlign: TextAlign.center,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -1102,16 +1466,20 @@ class PerfilIntellimenPage extends ConsumerWidget {
         ClipRRect(
           borderRadius: BorderRadius.circular(10),
           child: LinearProgressIndicator(
-            value: pontos / total,
+            value: total > 0 ? pontos / total : 0,
             backgroundColor: Colors.grey[200],
-            color: Colors.blue,
+            color: isWinner ? Colors.green : Colors.blue,
             minHeight: 20,
           ),
         ),
         const SizedBox(height: 4),
         Text(
-          ' 24pontos de  24total',
-          style: const TextStyle(fontSize: 14, color: Colors.black87),
+          '$pontos pontos de $total total',
+          style: TextStyle(
+            fontSize: 14, 
+            color: isWinner ? Colors.green[800] : Colors.black87,
+            fontWeight: isWinner ? FontWeight.bold : FontWeight.normal,
+          ),
         ),
       ],
     );
@@ -1121,13 +1489,8 @@ class PerfilIntellimenPage extends ConsumerWidget {
     return Builder(
       builder: (context) => GestureDetector(
         onTap: () {
-          // TODO: Implementar funcionalidade de adicionar
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Funcionalidade de adicionar em desenvolvimento'),
-              duration: Duration(seconds: 1),
-            ),
-          );
+          // Abrir modal de convite para Quiz Duplo
+          _showConviteQuizDuploModal(context);
         },
         child: Container(
           decoration: BoxDecoration(
@@ -1334,9 +1697,6 @@ class PerfilIntellimenPage extends ConsumerWidget {
     final fromUserId = convite['from_user_id'] as String;
     final toUserId = convite['to_user_id'] as String;
     
-    print('DEBUG ACEITAR: fromUserId = $fromUserId');
-    print('DEBUG ACEITAR: toUserId = $toUserId');
-    
     try {
       // Verificar se o convite existe e está pendente
       final conviteExistente = await supabaseService.client
@@ -1345,10 +1705,7 @@ class PerfilIntellimenPage extends ConsumerWidget {
           .eq('id', convite['id'])
           .single();
       
-      print('DEBUG ACEITAR: Convite encontrado: ${conviteExistente['status']}');
-      
       if (conviteExistente['status'] != 'pending') {
-        print('DEBUG ACEITAR: Convite já não está pendente!');
         return;
       }
       
@@ -1358,69 +1715,16 @@ class PerfilIntellimenPage extends ConsumerWidget {
           .update({'status': 'accepted'})
           .eq('id', convite['id']);
       
-      print('DEBUG ACEITAR: Status do convite atualizado');
-      
-      // Verificar dados dos usuários ANTES da atualização
-      final user1Antes = await supabaseService.getUser(toUserId);
-      final user2Antes = await supabaseService.getUser(fromUserId);
-      print('DEBUG ACEITAR: ANTES - user1.partnerId = ${user1Antes?.partnerId}');
-      print('DEBUG ACEITAR: ANTES - user2.partnerId = ${user2Antes?.partnerId}');
-      
-      // Verificar estrutura da tabela
-      try {
-        final estruturaTabela = await supabaseService.client
-            .from('users')
-            .select()
-            .limit(1)
-            .single();
-        print('DEBUG ACEITAR: Estrutura da tabela users:');
-        estruturaTabela.forEach((key, value) {
-          print('DEBUG ACEITAR:   $key: $value (${value.runtimeType})');
-        });
-        print('DEBUG ACEITAR: Campo partner_id existe: ${estruturaTabela.containsKey('partner_id')}');
-      } catch (e) {
-        print('DEBUG ACEITAR: Erro ao verificar estrutura da tabela: $e');
-      }
-      
       // Atualiza partner_id dos dois usuários
-      print('DEBUG ACEITAR: Atualizando partner_id do usuário $toUserId para $fromUserId');
-      final updateResult1 = await supabaseService.client
+      await supabaseService.client
           .from('users')
           .update({'partner_id': fromUserId})
           .eq('id', toUserId);
-      print('DEBUG ACEITAR: Resultado update1 = $updateResult1');
       
-      print('DEBUG ACEITAR: Atualizando partner_id do usuário $fromUserId para $toUserId');
-      final updateResult2 = await supabaseService.client
+      await supabaseService.client
           .from('users')
           .update({'partner_id': toUserId})
           .eq('id', fromUserId);
-      print('DEBUG ACEITAR: Resultado update2 = $updateResult2');
-      
-      // Verificar se a atualização funcionou
-      final user1Atualizado = await supabaseService.getUser(toUserId);
-      final user2Atualizado = await supabaseService.getUser(fromUserId);
-      print('DEBUG ACEITAR: DEPOIS - user1.partnerId = ${user1Atualizado?.partnerId}');
-      print('DEBUG ACEITAR: DEPOIS - user2.partnerId = ${user2Atualizado?.partnerId}');
-      
-      // Verificar diretamente no banco
-      final userDireto1 = await supabaseService.client
-          .from('users')
-          .select()
-          .eq('id', toUserId)
-          .single();
-      print('DEBUG ACEITAR: userDireto1.partner_id = ${userDireto1['partner_id']}');
-      print('DEBUG ACEITAR: userDireto1 completo = $userDireto1');
-      
-      final userDireto2 = await supabaseService.client
-          .from('users')
-          .select()
-          .eq('id', fromUserId)
-          .single();
-      print('DEBUG ACEITAR: userDireto2.partner_id = ${userDireto2['partner_id']}');
-      print('DEBUG ACEITAR: userDireto2 completo = $userDireto2');
-      
-      print('DEBUG ACEITAR: partner_id dos usuários atualizado');
       
       // Busca os desafios reais do banco
       final desafios = await supabaseService.getChallenges();
@@ -1465,25 +1769,10 @@ class PerfilIntellimenPage extends ConsumerWidget {
       }
       
       // Força refresh do usuário logado para atualizar o partnerId
-      print('DEBUG ACEITAR: Forçando refresh dos dados do usuário...');
       await ref.read(authNotifierProvider.notifier).refreshUserData();
       
-      // Verificar se a atualização funcionou
-      await Future.delayed(const Duration(milliseconds: 1000));
-      final userAtualizado = await supabaseService.getCurrentUser();
-      print('DEBUG ACEITAR: userAtualizado.partnerId = ${userAtualizado?.partnerId}');
-      
-      // Verificar diretamente no banco novamente
-      final userDiretoFinal = await supabaseService.client
-          .from('users')
-          .select()
-          .eq('id', toUserId)
-          .single();
-      print('DEBUG ACEITAR: userDiretoFinal.partner_id = ${userDiretoFinal['partner_id']}');
-      print('DEBUG ACEITAR: userDiretoFinal completo = $userDiretoFinal');
-      
     } catch (e) {
-      print('Erro ao aceitar desafio: $e');
+      developer.log('Erro ao aceitar desafio: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Erro ao aceitar desafio: $e')),
       );
@@ -1790,20 +2079,16 @@ class PerfilIntellimenPage extends ConsumerWidget {
                                       for (final img in imagensSelecionadas) {
                                         final file = File(img.path);
                                         final fileName = path.basename(img.path);
-                                        print('Tentando fazer upload: ' + fileName);
                                         final url = await supabaseService.uploadFile(
                                           file: file,
                                           bucketName: 'desafio-images',
                                           fileName: '${DateTime.now().millisecondsSinceEpoch}_$fileName',
                                         );
-                                        print('URL retornada: $url');
                                         if (url != null) imageUrls.add(url);
-                                        else print('Falha ao obter URL para $fileName');
                                       }
                                     }
                                   } catch (e, st) {
-                                    print('Erro no upload: $e');
-                                    print(st);
+                                    developer.log('Erro no upload: $e');
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(content: Text('Erro ao fazer upload: $e')),
                                     );
@@ -1813,29 +2098,23 @@ class PerfilIntellimenPage extends ConsumerWidget {
                                   // Salvar no banco
                                   final currentUser = ref.read(currentUserDataProvider).value;
                                   final supabaseService = ref.read(supabaseServiceProvider);
-                                  print('DEBUG MODAL: currentUser = ${currentUser?.id}');
-                                  print('DEBUG MODAL: currentUser.partnerId = ${currentUser?.partnerId}');
                                   
                                   // Buscar dados atualizados do usuário se necessário
                                   UserModel? userToUse = currentUser;
                                   if (currentUser?.partnerId == null) {
-                                    print('DEBUG MODAL: Tentando buscar dados atualizados do usuário...');
-                                    
                                     // Primeiro, forçar refresh do provider
                                     try {
                                       await ref.read(authNotifierProvider.notifier).refreshUserData();
                                       await Future.delayed(const Duration(milliseconds: 500));
                                     } catch (e) {
-                                      print('DEBUG MODAL: Erro ao fazer refresh: $e');
+                                      developer.log('Erro ao fazer refresh: $e');
                                     }
                                     
                                     try {
                                       final updatedUser = await supabaseService.getCurrentUser();
                                       if (updatedUser?.partnerId != null) {
-                                        print('DEBUG MODAL: Dados atualizados encontrados! partnerId = ${updatedUser?.partnerId}');
                                         userToUse = updatedUser;
                                       } else {
-                                        print('DEBUG MODAL: Usuário ainda não tem parceiro!');
                                         ScaffoldMessenger.of(context).showSnackBar(
                                           const SnackBar(content: Text('Você ainda não tem um parceiro para fazer desafios!')),
                                         );
@@ -1843,7 +2122,7 @@ class PerfilIntellimenPage extends ConsumerWidget {
                                         return;
                                       }
                                     } catch (e) {
-                                      print('DEBUG MODAL: Erro ao buscar dados atualizados: $e');
+                                      developer.log('Erro ao buscar dados atualizados: $e');
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         const SnackBar(content: Text('Erro ao buscar dados do usuário!')),
                                       );
@@ -1853,7 +2132,6 @@ class PerfilIntellimenPage extends ConsumerWidget {
                                   }
                                   
                                   if (userToUse == null || userToUse.partnerId == null) {
-                                    print('DEBUG MODAL: Usuário ou parceiro não encontrado!');
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(content: Text('Usuário/parceiro não encontrado!')),
                                     );
@@ -1878,11 +2156,8 @@ class PerfilIntellimenPage extends ConsumerWidget {
                                         .eq('challenge_id', desafioSelecionadoId!)
                                         .maybeSingle();
                                     
-                                    print('Registro existente: $existingRecord');
-                                    
                                     if (existingRecord != null) {
                                       // Atualizar o registro existente
-                                      print('Atualizando registro existente...');
                                       await supabaseService.client.from('user_challenges')
                                         .update({
                                           'notes': descricao,
@@ -1891,10 +2166,8 @@ class PerfilIntellimenPage extends ConsumerWidget {
                                           'completed_at': DateTime.now().toIso8601String(),
                                         })
                                         .eq('id', existingRecord['id']);
-                                      print('Registro atualizado com sucesso!');
                                     } else {
                                       // Criar novo registro
-                                      print('Criando novo registro...');
                                       await supabaseService.client.from('user_challenges').insert({
                                         'user_id': userToUse.id,
                                         'partner_id': userToUse.partnerId!,
@@ -1904,10 +2177,9 @@ class PerfilIntellimenPage extends ConsumerWidget {
                                         'status': 'completed',
                                         'completed_at': DateTime.now().toIso8601String(),
                                       });
-                                      print('Novo registro criado com sucesso!');
                                     }
                                   } catch (e) {
-                                    print('Erro ao salvar no banco: $e');
+                                    developer.log('Erro ao salvar no banco: $e');
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(content: Text('Erro ao salvar desafio: $e')),
                                     );
@@ -1930,7 +2202,7 @@ class PerfilIntellimenPage extends ConsumerWidget {
                                       setState(() {});
                                     }
                                   } catch (e) {
-                                    print('Erro ao atualizar dados: $e');
+                                    developer.log('Erro ao atualizar dados: $e');
                                   }
                                 },
                           child: isUploading
@@ -2648,8 +2920,7 @@ void showEditarDesafioModal(BuildContext context, SupabaseService supabaseServic
                                     }
                                   }
                                 } catch (e, st) {
-                                  print('Erro no upload: $e');
-                                  print(st);
+                                  developer.log('Erro no upload: $e');
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(content: Text('Erro ao fazer upload: $e')),
                                   );
@@ -2683,7 +2954,7 @@ void showEditarDesafioModal(BuildContext context, SupabaseService supabaseServic
                                     onUpdate?.call();
                                   }
                                 } catch (e) {
-                                  print('Erro ao atualizar dados: $e');
+                                  developer.log('Erro ao atualizar dados: $e');
                                 }
                               },
                         child: isUploading
@@ -2704,6 +2975,444 @@ void showEditarDesafioModal(BuildContext context, SupabaseService supabaseServic
       );
     },
   );
+  }
+
+  // =====================================================
+  // MÉTODOS PARA QUIZ DUPLO
+  // =====================================================
+
+  void _showConviteQuizDuploModal(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => const ConviteQuizDuploModal(),
+    );
+  }
+
+  // Verificar convites de Quiz Duplo pendentes
+  void _verificarConvitesQuizDuplo(BuildContext context, WidgetRef ref) {
+    final convitesAsync = ref.watch(convitesQuizDuploPendentesProvider);
+    final userLogado = ref.watch(currentUserDataProvider).value;
+    
+    convitesAsync.whenData((convites) {
+      if (convites.isNotEmpty) {
+        final convite = convites.first;
+        
+        // Verificação de segurança final
+        if (convite['partner_id'] != userLogado?.id || convite['user_id'] == userLogado?.id) {
+          return;
+        }
+        
+        final quizId = convite['quiz_id'] as String;
+        final fromUserId = convite['user_id'] as String;
+        final processedKey = 'quiz_duplo_${quizId}_${fromUserId}_${userLogado?.id}';
+        final hasProcessed = ref.read(processedConvitesProvider).contains(processedKey);
+        
+        if (!hasProcessed) {
+          final quiz = convite['quizzes'] as Map<String, dynamic>;
+          final fromUser = convite['users'] as Map<String, dynamic>;
+          
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!context.mounted) return;
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (_) => AlertDialog(
+                backgroundColor: Colors.white.withOpacity(0.95),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                title: const Text(
+                  'CONVITE PARA QUIZ DUPLO!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF000256),
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                content: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12.0),
+                  child: Text(
+                    '${fromUser['name']} convidou você para um Quiz Duplo!\nQuiz: ${quiz['title']}\nAceita o convite?',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      color: Color(0xFF232323),
+                    ),
+                  ),
+                ),
+                actionsAlignment: MainAxisAlignment.center,
+                actionsPadding: const EdgeInsets.only(bottom: 12),
+                actions: [
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF000256),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: () async {
+                      try {
+                        final currentUser = ref.read(currentUserDataProvider).value;
+                        if (currentUser == null) return;
+                        
+                        // Marcar como processado ANTES de aceitar
+                        final currentProcessed = ref.read(processedConvitesProvider);
+                        ref.read(processedConvitesProvider.notifier).state = {...currentProcessed, processedKey};
+                        
+                        await ref.read(dataNotifierProvider.notifier).aceitarConviteQuizDuplo(
+                          userId: currentUser.id,
+                          partnerId: fromUser['id'],
+                          quizId: quiz['id'],
+                        );
+                        
+                        if (context.mounted) {
+                          Navigator.of(context).pop();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Convite aceito! Quiz iniciado.')),
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          Navigator.of(context).pop();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Erro ao aceitar convite: $e')),
+                          );
+                        }
+                      }
+                    },
+                    child: const Text('Aceitar'),
+                  ),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: () async {
+                      try {
+                        final currentUser = ref.read(currentUserDataProvider).value;
+                        if (currentUser == null) return;
+                        
+                        // Marcar como processado ANTES de recusar
+                        final currentProcessed = ref.read(processedConvitesProvider);
+                        ref.read(processedConvitesProvider.notifier).state = {...currentProcessed, processedKey};
+                        
+                        await ref.read(dataNotifierProvider.notifier).recusarConviteQuizDuplo(
+                          userId: currentUser.id,
+                          partnerId: fromUser['id'],
+                          quizId: quiz['id'],
+                        );
+                        
+                        if (context.mounted) {
+                          Navigator.of(context).pop();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Convite recusado')),
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          Navigator.of(context).pop();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Erro ao recusar convite: $e')),
+                          );
+                        }
+                      }
+                    },
+                    child: const Text('Recusar'),
+                  ),
+                ],
+              ),
+            );
+          });
+        }
+      }
+    });
+  }
+
+
+
+class ConviteQuizDuploModal extends ConsumerStatefulWidget {
+  const ConviteQuizDuploModal({Key? key}) : super(key: key);
+
+  @override
+  ConsumerState<ConviteQuizDuploModal> createState() => _ConviteQuizDuploModalState();
+}
+
+class _ConviteQuizDuploModalState extends ConsumerState<ConviteQuizDuploModal> {
+  final TextEditingController controller = TextEditingController();
+  String termo = '';
+  QuizModel? quizSelecionado;
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final quizzesAsync = ref.watch(partnerQuizzesProvider);
+    final buscaAsync = termo.isNotEmpty
+        ? ref.watch(buscaUsuariosParaQuizDuploProvider(termo))
+        : null;
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(24),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(28),
+          gradient: LinearGradient(
+            colors: [
+              const Color.fromRGBO(30, 30, 30, 0.80),
+              const Color.fromRGBO(50, 50, 50, 0.80),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'CONVIDAR PARA QUIZ DUPLO',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.2,
+              ),
+            ),
+            const SizedBox(height: 18),
+            
+            // Seleção de Quiz
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white10,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Selecione um Quiz:',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  quizzesAsync.when(
+                    data: (quizzes) => Container(
+                      height: 120,
+                      child: ListView.builder(
+                        itemCount: quizzes.length,
+                        itemBuilder: (context, index) {
+                          final quiz = quizzes[index];
+                          final isSelected = quizSelecionado?.id == quiz.id;
+                          
+                          return GestureDetector(
+                            onTap: () => setState(() => quizSelecionado = quiz),
+                            child: Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: isSelected ? Colors.blue[600] : Colors.white10,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: isSelected ? Colors.blue : Colors.white24,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    isSelected ? Icons.check_circle : Icons.quiz,
+                                    color: isSelected ? Colors.white : Colors.white70,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          quiz.title,
+                                          style: TextStyle(
+                                            color: isSelected ? Colors.white : Colors.white70,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        Text(
+                                          quiz.description ?? '',
+                                          style: TextStyle(
+                                            color: isSelected ? Colors.white70 : Colors.white54,
+                                            fontSize: 12,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    loading: () => const Center(
+                      child: CircularProgressIndicator(color: Colors.white),
+                    ),
+                    error: (e, _) => Center(
+                      child: Text(
+                        'Erro ao carregar quizzes: $e',
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Busca de usuário
+            TextField(
+              controller: controller,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                labelText: 'Digite o nome do usuário',
+                labelStyle: const TextStyle(color: Colors.white70),
+                prefixIcon: const Icon(Icons.search, color: Colors.white70),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.white24),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.white),
+                ),
+                fillColor: Colors.white10,
+                filled: true,
+              ),
+              onChanged: (value) => setState(() => termo = value),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Lista de usuários
+            SizedBox(
+              height: 200,
+              child: (termo.isEmpty)
+                  ? const Center(
+                      child: Text(
+                        'Digite um nome para buscar',
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                    )
+                  : buscaAsync == null
+                      ? const SizedBox.shrink()
+                      : buscaAsync.when(
+                          data: (usuarios) => usuarios.isEmpty
+                              ? const Center(
+                                  child: Text(
+                                    'Nenhum usuário encontrado',
+                                    style: TextStyle(color: Colors.white70),
+                                  ),
+                                )
+                              : ListView.builder(
+                                  itemCount: usuarios.length,
+                                  itemBuilder: (context, index) {
+                                    final user = usuarios[index];
+                                    return ListTile(
+                                      leading: CircleAvatar(
+                                        backgroundImage: user.photoUrl != null
+                                            ? NetworkImage(user.photoUrl!)
+                                            : null,
+                                        child: user.photoUrl == null
+                                            ? const Icon(Icons.person, color: Colors.white)
+                                            : null,
+                                      ),
+                                      title: Text(
+                                        user.name,
+                                        style: const TextStyle(color: Colors.white),
+                                      ),
+                                      onTap: () => _enviarConvite(context, user),
+                                    );
+                                  },
+                                ),
+                          loading: () => const Center(
+                            child: CircularProgressIndicator(color: Colors.white),
+                          ),
+                          error: (e, _) => Center(
+                            child: Text(
+                              'Erro: $e',
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                          ),
+                        ),
+            ),
+            
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Fechar', style: TextStyle(color: Colors.white)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _enviarConvite(BuildContext context, UserModel user) async {
+    final currentUser = ref.read(currentUserDataProvider).value;
+    if (quizSelecionado == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Selecione um quiz primeiro')),
+      );
+      return;
+    }
+    if (currentUser == null) return;
+    if (user.id == currentUser.id) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Você não pode convidar a si mesmo!')),
+      );
+      return;
+    }
+    try {
+      await ref.read(dataNotifierProvider.notifier).criarConviteQuizDuplo(
+        fromUserId: currentUser.id,
+        toUserId: user.id,
+        quizId: quizSelecionado!.id,
+      );
+      if (context.mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Convite enviado para ${user.name}!'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao enviar convite: $e')),
+        );
+      }
+    }
+  }
+
+
 }
 
 class BuscaUsuarioModal extends ConsumerStatefulWidget {
@@ -2830,4 +3539,4 @@ Future<UserModel?> showBuscaUsuarioModal(BuildContext context, WidgetRef ref) {
     context: context,
     builder: (context) => const BuscaUsuarioModal(),
   );
-} 
+}

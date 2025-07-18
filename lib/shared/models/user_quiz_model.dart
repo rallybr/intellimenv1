@@ -1,18 +1,18 @@
-import 'quiz_model.dart';
-
 class UserQuizModel {
   final String id;
   final String userId;
   final String quizId;
-  final String? partnerId;
+  final String? partnerId; // Para Quiz Duplo
   final int score;
-  final int totalQuestions;
+  final int? totalQuestions;
   final DateTime startedAt;
   final DateTime? completedAt;
-  final String status;
-  final Map<String, dynamic>? answers;
+  final String status; // 'pending_invite', 'waiting_partner', 'in_progress', 'completed', 'abandoned'
   final DateTime createdAt;
-  final QuizModel? quiz;
+  final DateTime? updatedAt; // Novo campo para rastrear atualizações
+  final Map<String, dynamic>? answers;
+  final bool? isReady; // Novo campo para indicar se o usuário está pronto
+  final DateTime? readyAt; // Novo campo para timestamp de quando ficou pronto
 
   UserQuizModel({
     required this.id,
@@ -20,32 +20,38 @@ class UserQuizModel {
     required this.quizId,
     this.partnerId,
     required this.score,
-    required this.totalQuestions,
+    this.totalQuestions,
     required this.startedAt,
     this.completedAt,
     required this.status,
-    this.answers,
     required this.createdAt,
-    this.quiz,
+    this.updatedAt,
+    this.answers,
+    this.isReady,
+    this.readyAt,
   });
 
   factory UserQuizModel.fromJson(Map<String, dynamic> json) {
     return UserQuizModel(
-      id: json['id'],
-      userId: json['user_id'],
-      quizId: json['quiz_id'],
-      partnerId: json['partner_id'],
-      score: json['score'] ?? 0,
-      totalQuestions: json['total_questions'] ?? 0,
-      startedAt: DateTime.parse(json['started_at']),
+      id: json['id'] as String,
+      userId: json['user_id'] as String,
+      quizId: json['quiz_id'] as String,
+      partnerId: json['partner_id'] as String?,
+      score: json['score'] as int? ?? 0,
+      totalQuestions: json['total_questions'] as int?,
+      startedAt: DateTime.parse(json['started_at'] as String),
       completedAt: json['completed_at'] != null 
-          ? DateTime.parse(json['completed_at']) 
+          ? DateTime.parse(json['completed_at'] as String) 
           : null,
-      status: json['status'] ?? 'in_progress',
-      answers: json['answers'],
-      createdAt: DateTime.parse(json['created_at']),
-      quiz: json['quizzes'] != null 
-          ? QuizModel.fromJson(json['quizzes']) 
+      status: json['status'] as String? ?? 'in_progress',
+      createdAt: DateTime.parse(json['created_at'] as String),
+      updatedAt: json['updated_at'] != null 
+          ? DateTime.parse(json['updated_at'] as String) 
+          : null,
+      answers: json['answers'] as Map<String, dynamic>?,
+      isReady: json['is_ready'] as bool? ?? false,
+      readyAt: json['ready_at'] != null 
+          ? DateTime.parse(json['ready_at'] as String) 
           : null,
     );
   }
@@ -61,67 +67,12 @@ class UserQuizModel {
       'started_at': startedAt.toIso8601String(),
       'completed_at': completedAt?.toIso8601String(),
       'status': status,
-      'answers': answers,
       'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt?.toIso8601String(),
+      'answers': answers,
+      'is_ready': isReady,
+      'ready_at': readyAt?.toIso8601String(),
     };
-  }
-
-  // Calcula a porcentagem de acerto
-  double get percentage {
-    if (totalQuestions == 0) return 0.0;
-    return (score / totalQuestions) * 100;
-  }
-
-  // Retorna o texto da duração
-  String get durationText {
-    if (completedAt == null) return 'Em andamento';
-    
-    final duration = completedAt!.difference(startedAt);
-    final minutes = duration.inMinutes;
-    final seconds = duration.inSeconds % 60;
-    
-    if (minutes > 0) {
-      return '${minutes}m ${seconds}s';
-    } else {
-      return '${seconds}s';
-    }
-  }
-
-  // Retorna a duração em segundos
-  int get durationInSeconds {
-    if (completedAt == null) return 0;
-    return completedAt!.difference(startedAt).inSeconds;
-  }
-
-  // Getter para duração como Duration
-  Duration? get duration => completedAt != null ? completedAt!.difference(startedAt) : null;
-
-  // Verifica se o quiz foi completado
-  bool get isCompleted => status == 'completed';
-
-  // Verifica se o quiz está em progresso
-  bool get isInProgress => status == 'in_progress';
-
-  // Verifica se é um quiz individual
-  bool get isIndividual => partnerId == null;
-
-  // Verifica se é um quiz em parceria
-  bool get isPartner => partnerId != null;
-
-  // Retorna o texto do resultado baseado na porcentagem
-  String get resultText {
-    if (percentage >= 90) return 'Excelente! 🏆';
-    if (percentage >= 70) return 'Muito Bom! 👍';
-    if (percentage >= 50) return 'Bom! 😊';
-    return 'Continue Estudando! 📚';
-  }
-
-  // Retorna a cor baseada na porcentagem
-  String get resultColor {
-    if (percentage >= 90) return '#4CAF50'; // Verde
-    if (percentage >= 70) return '#8BC34A'; // Verde claro
-    if (percentage >= 50) return '#FF9800'; // Laranja
-    return '#F44336'; // Vermelho
   }
 
   UserQuizModel copyWith({
@@ -134,9 +85,11 @@ class UserQuizModel {
     DateTime? startedAt,
     DateTime? completedAt,
     String? status,
-    Map<String, dynamic>? answers,
     DateTime? createdAt,
-    QuizModel? quiz,
+    DateTime? updatedAt,
+    Map<String, dynamic>? answers,
+    bool? isReady,
+    DateTime? readyAt,
   }) {
     return UserQuizModel(
       id: id ?? this.id,
@@ -148,15 +101,56 @@ class UserQuizModel {
       startedAt: startedAt ?? this.startedAt,
       completedAt: completedAt ?? this.completedAt,
       status: status ?? this.status,
-      answers: answers ?? this.answers,
       createdAt: createdAt ?? this.createdAt,
-      quiz: quiz ?? this.quiz,
+      updatedAt: updatedAt ?? this.updatedAt,
+      answers: answers ?? this.answers,
+      isReady: isReady ?? this.isReady,
+      readyAt: readyAt ?? this.readyAt,
     );
+  }
+
+  // Getters para verificar status
+  bool get isPendingInvite => status == 'pending_invite';
+  bool get isWaitingPartner => status == 'waiting_partner';
+  bool get isInProgress => status == 'in_progress';
+  bool get isCompleted => status == 'completed';
+  bool get isAbandoned => status == 'abandoned';
+  bool get isPartner => partnerId != null;
+  bool get isIndividual => partnerId == null;
+
+  // Calcular porcentagem de acerto
+  double get percentage {
+    if (totalQuestions == null || totalQuestions == 0) return 0.0;
+    return (score / totalQuestions!) * 100;
+  }
+
+  // Calcular duração do quiz
+  Duration get duration {
+    final endTime = completedAt ?? DateTime.now();
+    return endTime.difference(startedAt);
+  }
+
+  // Formatar duração como texto
+  String get durationText {
+    final duration = this.duration;
+    final minutes = duration.inMinutes;
+    final seconds = duration.inSeconds % 60;
+    return '${minutes}m ${seconds}s';
+  }
+
+  // Verificar se ambos os parceiros estão prontos
+  bool get bothPartnersReady {
+    return isReady == true;
+  }
+
+  // Verificar se pode começar o quiz (ambos prontos)
+  bool get canStart {
+    return isPartner && bothPartnersReady && status == 'waiting_partner';
   }
 
   @override
   String toString() {
-    return 'UserQuizModel(id: $id, userId: $userId, quizId: $quizId, score: $score, status: $status)';
+    return 'UserQuizModel(id: $id, userId: $userId, quizId: $quizId, status: $status, score: $score)';
   }
 
   @override

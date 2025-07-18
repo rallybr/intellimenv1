@@ -101,7 +101,7 @@ class QuizConfrontationWidget extends StatelessWidget {
                 child: _buildPlayerResult(
                   name: 'Você',
                   score: userQuiz.score,
-                  totalQuestions: userQuiz.totalQuestions,
+                  totalQuestions: userQuiz.totalQuestions ?? 0,
                   percentage: userQuiz.percentage,
                   duration: userQuiz.durationText,
                   isWinner: userWon && !isTie,
@@ -137,7 +137,7 @@ class QuizConfrontationWidget extends StatelessWidget {
                 child: _buildPlayerResult(
                   name: partner.name,
                   score: partnerQuiz.score,
-                  totalQuestions: partnerQuiz.totalQuestions,
+                  totalQuestions: partnerQuiz.totalQuestions ?? 0,
                   percentage: partnerQuiz.percentage,
                   duration: partnerQuiz.durationText,
                   isWinner: !userWon && !isTie,

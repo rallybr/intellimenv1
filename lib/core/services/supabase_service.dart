@@ -409,44 +409,36 @@ class SupabaseService {
     }
   }
 
+  // Buscar desafios da dupla (usuário + parceiro)
   Future<List<UserChallengeModel>> getDesafiosDaDupla(String userId, String partnerId) async {
     try {
-      print('Buscando desafios da dupla: userId=$userId, partnerId=$partnerId');
+      developer.log('Buscando desafios da dupla: userId=$userId, partnerId=$partnerId');
       
-      // Buscar desafios onde o usuário é user_id e partner_id é o parceiro
+      // Buscar desafios do usuário
       final response1 = await _client
           .from('user_challenges')
-          .select()
+          .select('*, challenges(*)')
           .eq('user_id', userId)
-          .eq('partner_id', partnerId)
-          .order('created_at');
-      
-      // Buscar desafios onde o usuário é partner_id e user_id é o parceiro
+          .order('created_at', ascending: false);
+
+      // Buscar desafios do parceiro
       final response2 = await _client
           .from('user_challenges')
-          .select()
+          .select('*, challenges(*)')
           .eq('user_id', partnerId)
-          .eq('partner_id', userId)
-          .order('created_at');
-      
-      print('Response1: $response1');
-      print('Response2: $response2');
-      
+          .order('created_at', ascending: false);
+
+      // Combinar e ordenar por data de criação
       final allResponses = [...response1, ...response2];
-      print('Total de desafios encontrados: ${allResponses.length}');
+      allResponses.sort((a, b) => DateTime.parse(b['created_at'] as String)
+          .compareTo(DateTime.parse(a['created_at'] as String)));
+
+      developer.log('Total de desafios encontrados: ${allResponses.length}');
       
-      if (allResponses.isNotEmpty) {
-        return List<UserChallengeModel>.from(
-          allResponses
-            .whereType<Map<String, dynamic>>()
-            .map((json) => UserChallengeModel.fromJson(json))
-        );
-      }
-      return <UserChallengeModel>[];
+      return allResponses.map((json) => UserChallengeModel.fromJson(json)).toList();
     } catch (e) {
       developer.log('Erro ao buscar desafios da dupla: $e');
-      print('Erro ao buscar desafios da dupla: $e');
-      return <UserChallengeModel>[];
+      return [];
     }
   }
 
@@ -721,5 +713,483 @@ class SupabaseService {
       developer.log('Erro ao deletar categoria de quiz: $e');
       rethrow;
     }
+  }
+
+  // =====================================================
+  // QUIZ DUPLO
+  // =====================================================
+
+  // Buscar quizzes duplos ativos do usuário
+  Future<List<UserQuizModel>> getQuizDuplosAtivos(String userId) async {
+    try {
+      final response = await _client
+          .from('user_quizzes')
+          .select('*, quizzes(*)')
+          .or('user_id.eq.$userId,partner_id.eq.$userId')
+          .inFilter('status', ['waiting_partner', 'in_progress', 'completed'])
+          .order('created_at', ascending: false);
+      
+      return response.map((json) => UserQuizModel.fromJson(json)).toList();
+    } catch (e) {
+      developer.log('Erro ao buscar quizzes duplos ativos: $e');
+      return [];
+    }
+  }
+
+  // Buscar quizzes duplos completados do usuário
+  Future<List<UserQuizModel>> getQuizDuplosCompletados(String userId) async {
+    try {
+      final response = await _client
+          .from('user_quizzes')
+          .select('*, quizzes(*)')
+          .or('user_id.eq.$userId,partner_id.eq.$userId')
+          .inFilter('status', ['completed'])
+          .order('created_at', ascending: false)
+          .limit(10);
+      
+      return response.map((json) => UserQuizModel.fromJson(json)).toList();
+    } catch (e) {
+      developer.log('Erro ao buscar quizzes duplos completados: $e');
+      return [];
+    }
+  }
+
+  // Criar convite para Quiz Duplo
+  Future<void> criarConviteQuizDuplo({
+    required String fromUserId,
+    required String toUserId,
+    required String quizId,
+  }) async {
+    try {
+      // Buscar o número total de questões do quiz
+      final questions = await _client
+          .from('quiz_questions')
+          .select('id')
+          .eq('quiz_id', quizId);
+      
+      final totalQuestions = questions.length;
+
+      // Criar registro para o usuário que convida
+      await _client.from('user_quizzes').insert({
+        'user_id': fromUserId,
+        'quiz_id': quizId,
+        'partner_id': toUserId,
+        'score': 0,
+        'total_questions': totalQuestions,
+        'status': 'pending_invite',
+        'started_at': DateTime.now().toIso8601String(),
+        'is_ready': false,
+      });
+
+      // Criar registro para o usuário convidado
+      await _client.from('user_quizzes').insert({
+        'user_id': toUserId,
+        'quiz_id': quizId,
+        'partner_id': fromUserId,
+        'score': 0,
+        'total_questions': totalQuestions,
+        'status': 'pending_invite',
+        'started_at': DateTime.now().toIso8601String(),
+        'is_ready': false,
+      });
+    } catch (e) {
+      developer.log('Erro ao criar convite de quiz duplo: $e');
+      rethrow;
+    }
+  }
+
+  // Aceitar convite de Quiz Duplo
+  Future<void> aceitarConviteQuizDuplo({
+    required String userId,
+    required String partnerId,
+    required String quizId,
+  }) async {
+    try {
+      // Atualizar status dos dois registros para 'waiting_partner'
+      await _client
+          .from('user_quizzes')
+          .update({'status': 'waiting_partner'})
+          .or('user_id.eq.$userId,user_id.eq.$partnerId')
+          .eq('quiz_id', quizId)
+          .or('partner_id.eq.$userId,partner_id.eq.$partnerId');
+    } catch (e) {
+      developer.log('Erro ao aceitar convite de quiz duplo: $e');
+      rethrow;
+    }
+  }
+
+  // Marcar usuário como pronto para começar o quiz
+  Future<void> marcarUsuarioPronto({
+    required String userId,
+    required String quizId,
+  }) async {
+    try {
+      await _client
+          .from('user_quizzes')
+          .update({
+            'is_ready': true,
+            'ready_at': DateTime.now().toIso8601String(),
+          })
+          .eq('user_id', userId)
+          .eq('quiz_id', quizId);
+    } catch (e) {
+      developer.log('Erro ao marcar usuário como pronto: $e');
+      rethrow;
+    }
+  }
+
+  // Verificar se ambos os parceiros estão prontos e iniciar o quiz
+  Future<bool> verificarEIniciarQuizDuplo({
+    required String quizId,
+    required String user1Id,
+    required String user2Id,
+  }) async {
+    try {
+      // Buscar status de ambos os usuários
+      final response = await _client
+          .from('user_quizzes')
+          .select('user_id, is_ready')
+          .eq('quiz_id', quizId)
+          .inFilter('user_id', [user1Id, user2Id]);
+
+      if (response.length == 2) {
+        final user1Ready = response.firstWhere((r) => r['user_id'] == user1Id)['is_ready'] ?? false;
+        final user2Ready = response.firstWhere((r) => r['user_id'] == user2Id)['is_ready'] ?? false;
+
+        // Se ambos estão prontos, atualizar status para 'in_progress'
+        if (user1Ready && user2Ready) {
+          await _client
+              .from('user_quizzes')
+              .update({'status': 'in_progress'})
+              .eq('quiz_id', quizId)
+              .inFilter('user_id', [user1Id, user2Id]);
+          
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (e) {
+      developer.log('Erro ao verificar e iniciar quiz duplo: $e');
+      return false;
+    }
+  }
+
+  // Recusar convite de Quiz Duplo
+  Future<void> recusarConviteQuizDuplo({
+    required String userId,
+    required String partnerId,
+    required String quizId,
+  }) async {
+    try {
+      // Deletar os registros do convite
+      await _client
+          .from('user_quizzes')
+          .delete()
+          .or('user_id.eq.$userId,user_id.eq.$partnerId')
+          .eq('quiz_id', quizId)
+          .or('partner_id.eq.$userId,partner_id.eq.$partnerId');
+    } catch (e) {
+      developer.log('Erro ao recusar convite de quiz duplo: $e');
+      rethrow;
+    }
+  }
+
+  // Buscar convites pendentes de Quiz Duplo
+  Future<List<Map<String, dynamic>>> getConvitesQuizDuploPendentes(String userId) async {
+    try {
+      // Buscar apenas registros onde o usuário é o destinatário (partner_id)
+      // E NÃO o remetente (user_id)
+      final response = await _client
+          .from('user_quizzes')
+          .select('*, quizzes(*), users!user_quizzes_user_id_fkey(*)')
+          .eq('partner_id', userId)  // Usuário é o destinatário
+          .neq('user_id', userId)    // Usuário NÃO é o remetente
+          .eq('status', 'pending_invite')
+          .order('created_at', ascending: false);
+      
+      // Filtro adicional para garantir que só retorne convites válidos
+      final convitesFiltrados = response.where((convite) {
+        final user_id = convite['user_id'] as String;
+        final partner_id = convite['partner_id'] as String;
+        
+        // O usuário deve ser o destinatário (partner_id) e não o remetente (user_id)
+        return partner_id == userId && user_id != userId;
+      }).toList();
+      
+      return convitesFiltrados;
+    } catch (e) {
+      developer.log('Erro ao buscar convites de quiz duplo pendentes: $e');
+      return [];
+    }
+  }
+
+  // Buscar usuários para convite (excluindo o próprio usuário)
+  Future<List<UserModel>> buscarUsuariosParaQuizDuplo(String currentUserId, String termo) async {
+    try {
+      final response = await _client
+          .from('users')
+          .select()
+          .neq('id', currentUserId)
+          .ilike('name', '$termo%')
+          .eq('is_active', true)
+          .limit(10);
+      
+      return response.map((json) => UserModel.fromJson(json)).toList();
+    } catch (e) {
+      developer.log('Erro ao buscar usuários para quiz duplo: $e');
+      return [];
+    }
+  }
+
+  // Atualizar pontuação do Quiz Duplo
+  Future<void> atualizarPontuacaoQuizDuplo({
+    required String userId,
+    required String quizId,
+    required int score,
+    required Map<String, dynamic> answers,
+  }) async {
+    try {
+      await _client
+          .from('user_quizzes')
+          .update({
+            'score': score,
+            'answers': answers,
+            'completed_at': DateTime.now().toIso8601String(),
+            'status': 'completed',
+          })
+          .eq('user_id', userId)
+          .eq('quiz_id', quizId);
+    } catch (e) {
+      developer.log('Erro ao atualizar pontuação do quiz duplo: $e');
+      rethrow;
+    }
+  }
+
+  // Verificar se ambos os usuários completaram o quiz
+  Future<bool> verificarQuizDuploCompleto(String quizId, String user1Id, String user2Id) async {
+    try {
+      final response = await _client
+          .from('user_quizzes')
+          .select('status')
+          .eq('quiz_id', quizId)
+          .inFilter('user_id', [user1Id, user2Id]);
+      
+      return response.every((record) => record['status'] == 'completed');
+    } catch (e) {
+      developer.log('Erro ao verificar se quiz duplo está completo: $e');
+      return false;
+    }
+  }
+
+  // =====================================================
+  // SINCRONIZAÇÃO EM TEMPO REAL
+  // =====================================================
+
+  // Stream para monitorar mudanças em user_quizzes em tempo real
+  Stream<List<Map<String, dynamic>>> streamUserQuizzes(String userId) {
+    return _client
+        .from('user_quizzes')
+        .stream(primaryKey: ['id'])
+        .eq('user_id', userId)
+        .order('created_at', ascending: false);
+  }
+
+  // Stream para monitorar status específico de um quiz duplo
+  Stream<List<Map<String, dynamic>>> streamQuizDuploStatus(String quizId) {
+    return _client
+        .from('user_quizzes')
+        .stream(primaryKey: ['id'])
+        .eq('quiz_id', quizId)
+        .order('created_at', ascending: false);
+  }
+
+  // Stream para monitorar convites pendentes (como partner_id)
+  Stream<List<Map<String, dynamic>>> streamConvitesPendentes(String userId) {
+    return _client
+        .from('user_quizzes')
+        .stream(primaryKey: ['id'])
+        .eq('partner_id', userId)
+        .order('created_at', ascending: false);
+  }
+
+  // Buscar dados atualizados de um quiz duplo específico
+  Future<Map<String, dynamic>?> getQuizDuploData(String quizId, String userId) async {
+    try {
+      final response = await _client
+          .from('user_quizzes')
+          .select('*, quizzes(*), users!user_quizzes_user_id_fkey(*)')
+          .eq('quiz_id', quizId)
+          .or('user_id.eq.$userId,partner_id.eq.$userId')
+          .order('created_at', ascending: false);
+
+      if (response.isNotEmpty) {
+        // Separar dados do usuário atual e do parceiro
+        final userData = response.firstWhere(
+          (r) => r['user_id'] == userId,
+          orElse: () => response.first,
+        );
+        
+        final partnerData = response.firstWhere(
+          (r) => r['user_id'] != userId,
+          orElse: () => response.first,
+        );
+
+        return {
+          'userQuiz': userData,
+          'partnerQuiz': partnerData,
+          'quiz': userData['quizzes'],
+          'partner': partnerData['users'],
+        };
+      }
+      
+      return null;
+    } catch (e) {
+      developer.log('Erro ao buscar dados do quiz duplo: $e');
+      return null;
+    }
+  }
+
+  // Verificar se um quiz duplo pode ser iniciado
+  Future<bool> podeIniciarQuizDuplo(String quizId, String userId) async {
+    try {
+      final response = await _client
+          .from('user_quizzes')
+          .select('is_ready, status')
+          .eq('quiz_id', quizId)
+          .or('user_id.eq.$userId,partner_id.eq.$userId');
+
+      if (response.length == 2) {
+        final userReady = response.firstWhere((r) => r['user_id'] == userId)['is_ready'] ?? false;
+        final partnerReady = response.firstWhere((r) => r['user_id'] != userId)['is_ready'] ?? false;
+        final status = response.first['status'] as String;
+
+        return userReady && partnerReady && status == 'waiting_partner';
+      }
+      
+      return false;
+    } catch (e) {
+      developer.log('Erro ao verificar se pode iniciar quiz duplo: $e');
+      return false;
+    }
+  }
+
+  // =====================================================
+  // ATUALIZAÇÃO EM TEMPO REAL - QUIZ DUPLO
+  // =====================================================
+
+  // Atualizar pontuação em tempo real (sem finalizar o quiz)
+  Future<void> atualizarPontuacaoTempoReal({
+    required String userId,
+    required String quizId,
+    required int score,
+    required Map<String, dynamic> answers,
+  }) async {
+    try {
+      await _client
+          .from('user_quizzes')
+          .update({
+            'score': score,
+            'answers': answers,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('user_id', userId)
+          .eq('quiz_id', quizId);
+    } catch (e) {
+      developer.log('Erro ao atualizar pontuação em tempo real: $e');
+      rethrow;
+    }
+  }
+
+  // Finalizar quiz individual (marcar como completed)
+  Future<void> finalizarQuizIndividual({
+    required String userId,
+    required String quizId,
+    required int score,
+    required Map<String, dynamic> answers,
+  }) async {
+    try {
+      await _client
+          .from('user_quizzes')
+          .update({
+            'score': score,
+            'answers': answers,
+            'completed_at': DateTime.now().toIso8601String(),
+            'status': 'completed',
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('user_id', userId)
+          .eq('quiz_id', quizId);
+    } catch (e) {
+      developer.log('Erro ao finalizar quiz individual: $e');
+      rethrow;
+    }
+  }
+
+  // Verificar se ambos os usuários finalizaram o quiz
+  Future<bool> verificarAmbosFinalizaram(String quizId) async {
+    try {
+      final response = await _client
+          .from('user_quizzes')
+          .select('user_id, status')
+          .eq('quiz_id', quizId);
+      
+      // Verificar se todos os registros estão com status 'completed'
+      return response.every((record) => record['status'] == 'completed');
+    } catch (e) {
+      developer.log('Erro ao verificar se ambos finalizaram: $e');
+      return false;
+    }
+  }
+
+  // Buscar pontuação atual de um quiz duplo
+  Future<Map<String, dynamic>> buscarPontuacaoQuizDuplo(String quizId) async {
+    try {
+      final response = await _client
+          .from('user_quizzes')
+          .select('user_id, partner_id, score, total_questions, status, answers')
+          .eq('quiz_id', quizId);
+      
+      if (response.isEmpty) return {};
+      
+      final result = <String, dynamic>{};
+      for (final record in response) {
+        final userId = record['user_id'] as String;
+        result[userId] = {
+          'score': record['score'] ?? 0,
+          'totalQuestions': record['total_questions'] ?? 0,
+          'status': record['status'],
+          'answers': record['answers'],
+          'partnerId': record['partner_id'],
+        };
+      }
+      
+      return result;
+    } catch (e) {
+      developer.log('Erro ao buscar pontuação do quiz duplo: $e');
+      return {};
+    }
+  }
+
+  // Stream para monitorar pontuação em tempo real
+  Stream<Map<String, dynamic>> streamPontuacaoQuizDuplo(String quizId) {
+    return _client
+        .from('user_quizzes')
+        .stream(primaryKey: ['id'])
+        .eq('quiz_id', quizId)
+        .map((data) {
+          final result = <String, dynamic>{};
+          for (final record in data) {
+            final userId = record['user_id'] as String;
+            result[userId] = {
+              'score': record['score'] ?? 0,
+              'totalQuestions': record['total_questions'] ?? 0,
+              'status': record['status'],
+              'answers': record['answers'],
+              'partnerId': record['partner_id'],
+            };
+          }
+          return result;
+        });
   }
 } 

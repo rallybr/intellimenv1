@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../shared/models/quiz_model.dart';
 import '../../../../shared/providers/quiz_provider.dart';
-import '../widgets/question_widget.dart';
+import '../../../../shared/providers/data_provider.dart';
+import '../../../../shared/models/quiz_model.dart';
+import '../../../../shared/models/user_quiz_model.dart';
+import '../../../../shared/models/quiz_question_model.dart';
 import 'quiz_result_page.dart';
-import 'package:intellimen/shared/models/user_quiz_model.dart';
-import 'package:intellimen/shared/models/quiz_question_model.dart';
+import '../widgets/question_widget.dart';
 
 class QuizPlayPage extends ConsumerStatefulWidget {
   final UserQuizModel userQuiz;
@@ -244,16 +245,42 @@ class _QuizPlayPageState extends ConsumerState<QuizPlayPage> {
     });
 
     try {
-      await ref.read(quizNotifierProvider.notifier).answerQuestion(
-        userQuizId: currentUserQuiz.id,
-        questionId: questions[currentQuestionIndex].id,
-        selectedAnswer: selectedAnswer,
-      );
+      // Verificar se é um quiz duplo
+      final isQuizDuplo = currentUserQuiz.partnerId != null;
+      
+      // Atualizar pontuação local
+      final newScore = currentUserQuiz.score + 
+          (questions[currentQuestionIndex].isCorrect(selectedAnswer) ? 1 : 0);
+      
+      // Atualizar respostas
+      final updatedAnswers = Map<String, dynamic>.from(currentUserQuiz.answers ?? {});
+      updatedAnswers[questions[currentQuestionIndex].id] = {
+        'selectedAnswer': selectedAnswer,
+        'isCorrect': questions[currentQuestionIndex].isCorrect(selectedAnswer),
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+
+      if (isQuizDuplo) {
+        // Para quiz duplo: atualizar pontuação em tempo real
+        await ref.read(pontuacaoTempoRealNotifierProvider.notifier).atualizarPontuacaoTempoReal(
+          userId: currentUserQuiz.userId,
+          quizId: currentUserQuiz.quizId,
+          score: newScore,
+          answers: updatedAnswers,
+        );
+      } else {
+        // Para quiz individual: usar o método normal
+        await ref.read(quizNotifierProvider.notifier).answerQuestion(
+          userQuizId: currentUserQuiz.id,
+          questionId: questions[currentQuestionIndex].id,
+          selectedAnswer: selectedAnswer,
+        );
+      }
 
       // Atualizar o userQuiz local
       final updatedUserQuiz = currentUserQuiz.copyWith(
-        score: currentUserQuiz.score + 
-            (questions[currentQuestionIndex].isCorrect(selectedAnswer) ? 1 : 0),
+        score: newScore,
+        answers: updatedAnswers,
       );
 
       if (mounted) {
@@ -352,16 +379,56 @@ class _QuizPlayPageState extends ConsumerState<QuizPlayPage> {
 
   void _completeQuiz() async {
     try {
-      final completedQuiz = await ref
-          .read(quizNotifierProvider.notifier)
-          .completeQuiz(currentUserQuiz.id);
-
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (context) => QuizResultPage(userQuiz: completedQuiz),
-          ),
+      // Verificar se é um quiz duplo
+      final isQuizDuplo = currentUserQuiz.partnerId != null;
+      
+      if (isQuizDuplo) {
+        // Para quiz duplo: finalizar individualmente
+        await ref.read(pontuacaoTempoRealNotifierProvider.notifier).finalizarQuizIndividual(
+          userId: currentUserQuiz.userId,
+          quizId: currentUserQuiz.quizId,
+          score: currentUserQuiz.score,
+          answers: currentUserQuiz.answers ?? {},
         );
+        
+        // Verificar se ambos finalizaram
+        final ambosFinalizaram = await ref.read(ambosFinalizaramProvider(currentUserQuiz.quizId).future);
+        
+        if (mounted) {
+          if (ambosFinalizaram) {
+            // Ambos finalizaram, mostrar resultado final
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (context) => QuizResultPage(userQuiz: currentUserQuiz),
+              ),
+            );
+          } else {
+            // Apenas este usuário finalizou, mostrar mensagem
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Quiz finalizado! Aguardando seu parceiro terminar...'),
+                backgroundColor: Colors.blue,
+                duration: Duration(seconds: 3),
+              ),
+            );
+            
+            // Voltar para a lista de quizzes
+            Navigator.of(context).pop();
+          }
+        }
+      } else {
+        // Para quiz individual: usar o método normal
+        final completedQuiz = await ref
+            .read(quizNotifierProvider.notifier)
+            .completeQuiz(currentUserQuiz.id);
+
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => QuizResultPage(userQuiz: completedQuiz),
+            ),
+          );
+        }
       }
     } catch (error) {
       if (mounted) {

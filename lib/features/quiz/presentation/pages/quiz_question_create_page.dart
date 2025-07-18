@@ -5,6 +5,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/services/supabase_service.dart';
 import '../../../../shared/models/quiz_question_model.dart';
 import '../../../../shared/providers/auth_provider.dart';
+import 'dart:developer' as developer;
 
 class QuizQuestionCreatePage extends ConsumerStatefulWidget {
   final String? quizId;
@@ -54,7 +55,7 @@ class _QuizQuestionCreatePageState extends ConsumerState<QuizQuestionCreatePage>
         }
       });
     } catch (error) {
-      print('Erro ao carregar quizzes: $error');
+      developer.log('Erro ao carregar quizzes: $error');
     }
   }
 

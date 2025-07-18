@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import '../../../core/services/supabase_service.dart';
-import '../../../shared/models/quiz_model.dart';
-import '../../../shared/providers/auth_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/services/supabase_service.dart';
+import '../../../../shared/providers/auth_provider.dart';
+import '../../../../shared/models/quiz_category_model.dart';
+import '../../../../shared/models/quiz_model.dart';
+import '../../../../shared/models/quiz_question_model.dart';
 
 class QuizQuestionCreatePage extends ConsumerStatefulWidget {
   const QuizQuestionCreatePage({Key? key}) : super(key: key);
@@ -60,13 +62,16 @@ class _QuizQuestionCreatePageState extends ConsumerState<QuizQuestionCreatePage>
     setState(() => _isLoading = true);
     try {
       final options = _optionControllers.map((c) => c.text.trim()).toList();
-      await SupabaseService().createQuizQuestion(
+      final question = QuizQuestionModel(
+        id: '',
         quizId: _selectedQuizId!,
         question: _questionController.text.trim(),
         options: options,
         correctAnswer: _correctIndex!,
         explanation: _explanationController.text.trim().isEmpty ? null : _explanationController.text.trim(),
+        createdAt: DateTime.now(),
       );
+      await SupabaseService().createQuizQuestion(question);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Questão criada com sucesso!')));
       _questionController.clear();
       _optionControllers.forEach((c) => c.clear());

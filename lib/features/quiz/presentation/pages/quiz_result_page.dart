@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../shared/models/quiz_model.dart';
 import '../../../../shared/models/user_model.dart';
-import '../../../../shared/providers/quiz_provider.dart';
+import '../../../../shared/providers/data_provider.dart';
 import '../../../../shared/providers/auth_provider.dart';
 import '../widgets/quiz_confrontation_widget.dart';
 import 'package:intellimen/shared/models/user_quiz_model.dart';
@@ -281,7 +281,7 @@ class _QuizResultPageState extends ConsumerState<QuizResultPage> {
           const SizedBox(height: 16),
           
           _buildStatRow('Acertos', '${widget.userQuiz.score}', Colors.green),
-          _buildStatRow('Erros', '${widget.userQuiz.totalQuestions - widget.userQuiz.score}', Colors.red),
+          _buildStatRow('Erros', '${(widget.userQuiz.totalQuestions ?? 0) - widget.userQuiz.score}', Colors.red),
           _buildStatRow('Total de Perguntas', '${widget.userQuiz.totalQuestions}', Colors.blue),
           _buildStatRow('Taxa de Acerto', '${widget.userQuiz.percentage.toStringAsFixed(1)}%', Colors.orange),
           

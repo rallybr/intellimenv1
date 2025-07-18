@@ -4,8 +4,10 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../shared/providers/quiz_provider.dart';
 import '../../../../shared/providers/auth_provider.dart';
 import '../../../../shared/models/quiz_model.dart';
+import '../../../../shared/models/user_quiz_model.dart';
 import '../widgets/quiz_card_widget.dart';
 import 'quiz_play_page.dart';
+import 'quiz_waiting_partner_page.dart';
 
 class QuizListPage extends ConsumerStatefulWidget {
   const QuizListPage({super.key});
@@ -225,11 +227,53 @@ class _QuizListPageState extends ConsumerState<QuizListPage>
     _showQuizStartDialog(quiz, null);
   }
 
-  void _startPartnerQuiz(QuizModel quiz) {
+  void _startPartnerQuiz(QuizModel quiz) async {
     final userAsync = ref.read(currentUserDataProvider);
-    userAsync.whenData((user) {
+    userAsync.whenData((user) async {
       if (user?.partnerId != null) {
-        _showQuizStartDialog(quiz, user!.partnerId);
+        // Verificar se já existe um quiz duplo em andamento para este quiz
+        final supabaseService = ref.read(supabaseServiceProvider);
+        final existingQuizzes = await supabaseService.getUserQuizzes(user!.id);
+        
+        final existingQuiz = existingQuizzes.firstWhere(
+          (uq) => uq.quizId == quiz.id && uq.isPartner,
+          orElse: () => UserQuizModel(
+            id: '',
+            userId: user.id,
+            quizId: quiz.id,
+            partnerId: user.partnerId,
+            score: 0,
+            totalQuestions: 0,
+            startedAt: DateTime.now(),
+            status: 'pending_invite',
+            createdAt: DateTime.now(),
+            isReady: false,
+          ),
+        );
+
+        if (existingQuiz.id.isNotEmpty) {
+          // Se já existe um quiz, verificar o status
+          if (existingQuiz.isWaitingPartner) {
+            // Redirecionar para página de aguardando parceiro
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => QuizWaitingPartnerPage(userQuiz: existingQuiz),
+              ),
+            );
+            return;
+          } else if (existingQuiz.isInProgress) {
+            // Redirecionar para página do quiz
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => QuizPlayPage(userQuiz: existingQuiz),
+              ),
+            );
+            return;
+          }
+        }
+
+        // Se não existe ou está em outro status, mostrar diálogo de início
+        _showQuizStartDialog(quiz, user.partnerId);
       }
     });
   }
@@ -250,13 +294,14 @@ class _QuizListPageState extends ConsumerState<QuizListPage>
             Text('Dificuldade: ${quiz.difficultyText}'),
             if (partnerId != null) ...[
               const SizedBox(height: 8),
-              const Text('Tipo: Quiz em Parceria'),
+              const Text(
+                'Este quiz será realizado em parceria.',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue,
+                ),
+              ),
             ],
-            const SizedBox(height: 16),
-            const Text(
-              'Tem certeza que deseja iniciar este quiz?',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
           ],
         ),
         actions: [
@@ -267,7 +312,7 @@ class _QuizListPageState extends ConsumerState<QuizListPage>
           ElevatedButton(
             onPressed: () {
               Navigator.of(context).pop();
-              _startQuiz(quiz, partnerId);
+              _createAndStartQuiz(quiz, partnerId);
             },
             child: const Text('Iniciar'),
           ),
@@ -276,13 +321,49 @@ class _QuizListPageState extends ConsumerState<QuizListPage>
     );
   }
 
-  void _startQuiz(QuizModel quiz, String? partnerId) async {
+  void _createAndStartQuiz(QuizModel quiz, String? partnerId) async {
     try {
-      final userQuiz = await ref
-          .read(quizNotifierProvider.notifier)
-          .startQuiz(quizId: quiz.id, partnerId: partnerId);
+      final user = ref.read(currentUserDataProvider).value;
+      if (user == null) return;
 
-      if (mounted) {
+      if (partnerId != null) {
+        // Criar convite para quiz duplo
+        final supabaseService = ref.read(supabaseServiceProvider);
+        await supabaseService.criarConviteQuizDuplo(
+          fromUserId: user.id,
+          toUserId: partnerId,
+          quizId: quiz.id,
+        );
+
+        // Buscar o quiz criado
+        final userQuizzes = await supabaseService.getUserQuizzes(user.id);
+        final createdQuiz = userQuizzes.firstWhere(
+          (uq) => uq.quizId == quiz.id && uq.partnerId == partnerId,
+        );
+
+        // Navegar para a página de aguardando parceiro
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => QuizWaitingPartnerPage(userQuiz: createdQuiz),
+          ),
+        );
+      } else {
+        // Quiz individual - criar e iniciar diretamente
+        final supabaseService = ref.read(supabaseServiceProvider);
+        final questions = await supabaseService.getQuizQuestions(quiz.id);
+        
+        final userQuiz = UserQuizModel(
+          id: '',
+          userId: user.id,
+          quizId: quiz.id,
+          score: 0,
+          totalQuestions: questions.length,
+          startedAt: DateTime.now(),
+          status: 'in_progress',
+          createdAt: DateTime.now(),
+          isReady: false,
+        );
+
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => QuizPlayPage(userQuiz: userQuiz),
@@ -290,14 +371,12 @@ class _QuizListPageState extends ConsumerState<QuizListPage>
         );
       }
     } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erro ao iniciar quiz: $error'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erro ao iniciar quiz: $error'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 } 

@@ -8,9 +8,11 @@ import '../pages/complete_profile_page.dart';
 import '../../../welcome/presentation/pages/welcome_home_page.dart';
 import '../pages/email_confirmation_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:developer' as developer;
+import '../../../../shared/providers/auth_provider.dart';
 
 class SignupPage extends ConsumerStatefulWidget {
-  const SignupPage({super.key});
+  const SignupPage({Key? key}) : super(key: key);
 
   @override
   ConsumerState<SignupPage> createState() => _SignupPageState();
@@ -35,7 +37,7 @@ class _SignupPageState extends ConsumerState<SignupPage> {
     super.dispose();
   }
 
-  Future<void> _signup() async {
+  Future<void> _signUp() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
@@ -43,38 +45,30 @@ class _SignupPageState extends ConsumerState<SignupPage> {
     });
 
     try {
-      print('Iniciando cadastro...');
-      final authResponse = await SupabaseService().signUp(
+      developer.log('Iniciando processo de cadastro');
+      
+      await ref.read(authNotifierProvider.notifier).signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text,
         name: _nameController.text.trim(),
       );
-      print('Resposta do Auth:  [32m${authResponse.user} [0m');
 
-      if (authResponse.user != null) {
-        if (mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) => EmailConfirmationPage(
-                email: _emailController.text.trim(),
-                password: _passwordController.text,
-                name: _nameController.text.trim(),
-              ),
-            ),
-          );
-        }
-      } else {
-        print('authResponse.user é null');
-      }
-    } catch (e) {
-      print('Erro no cadastro: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erro ao criar conta: $e'),
-            backgroundColor: AppColors.error,
+        developer.log('Cadastro realizado com sucesso');
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => EmailConfirmationPage(
+              email: _emailController.text.trim(),
+              password: _passwordController.text,
+              name: _nameController.text.trim(),
+            ),
           ),
         );
+      }
+    } catch (e) {
+      developer.log('Erro durante o cadastro: $e');
+      if (mounted) {
+        _showErrorDialog('Erro no cadastro', e.toString());
       }
     } finally {
       if (mounted) {
@@ -83,6 +77,22 @@ class _SignupPageState extends ConsumerState<SignupPage> {
         });
       }
     }
+  }
+
+  void _showErrorDialog(String title, String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -290,7 +300,7 @@ class _SignupPageState extends ConsumerState<SignupPage> {
                     SizedBox(
                       height: 50,
                       child: ElevatedButton(
-                        onPressed: _isLoading ? null : _signup,
+                        onPressed: _isLoading ? null : _signUp,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.gold,
                           foregroundColor: AppColors.primary,
